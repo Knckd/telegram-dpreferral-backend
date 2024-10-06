@@ -6,7 +6,6 @@ const express = require('express');
 const mongoose = require('mongoose');
 const TelegramBot = require('node-telegram-bot-api');
 const cors = require('cors');
-const bodyParser = require('body-parser');
 
 // Import the User model
 const User = require('./models/User');
@@ -18,7 +17,7 @@ const app = express();
 app.use(cors({
   origin: 'https://knckd.github.io'
 }));
-app.use(bodyParser.json());
+app.use(express.json());
 
 // Connect to MongoDB
 mongoose
@@ -27,13 +26,13 @@ mongoose
     useUnifiedTopology: true,
   })
   .then(() => console.log('MongoDB connected'))
-  .catch((err) => console.log(err));
+  .catch((err) => console.error('MongoDB connection error:', err));
 
 // Initialize Telegram Bot without polling
 const bot = new TelegramBot(process.env.BOT_TOKEN);
 
 // Set up webhook
-const domain = process.env.DOMAIN; // Your Render domain, e.g., 'https://your-app.onrender.com'
+const domain = process.env.DOMAIN; // Ensure this environment variable is set
 const webhookPath = `/bot${process.env.BOT_TOKEN}`;
 const webhookURL = `${domain}${webhookPath}`;
 
@@ -85,6 +84,12 @@ app.post('/api/verify', async (req, res) => {
     }
   } catch (error) {
     console.error('Verification Error:', error);
+
+    // Handle specific Telegram errors
+    if (error.response && error.response.statusCode === 400) {
+      return res.json({ success: false, message: 'Invalid Telegram username. Please ensure you entered it correctly.' });
+    }
+
     res.status(500).json({ success: false, message: 'An error occurred during verification.' });
   }
 });
