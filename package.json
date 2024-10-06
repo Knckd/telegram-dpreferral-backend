@@ -1,7 +1,7 @@
 {
-  "name": "telegram-referral-backend",
+  "name": "telegram-dpreferral-backend",
   "version": "1.0.0",
-  "description": "Backend for Telegram Referral Website",
+  "description": "Telegram DP Referral Backend",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
