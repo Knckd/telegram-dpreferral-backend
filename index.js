@@ -15,7 +15,7 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: 'https://knckd.github.io'
+  origin: 'https://knckd.github.io' // Adjust this to your GitHub Pages URL
 }));
 app.use(express.json());
 
@@ -24,22 +24,10 @@ mongoose
   .connect(process.env.MONGODB_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
+    serverSelectionTimeoutMS: 5000, // Adjust the timeout as needed
   })
   .then(() => console.log('MongoDB connected'))
   .catch((err) => console.error('MongoDB connection error:', err));
-
-mongoose.connection.on('connected', () => {
-  console.log('Mongoose connected to MongoDB');
-});
-
-mongoose.connection.on('error', (err) => {
-  console.error('Mongoose connection error:', err);
-});
-
-mongoose.connection.on('disconnected', () => {
-  console.log('Mongoose disconnected from MongoDB');
-});
-
 
 // Initialize Telegram Bot without polling
 const bot = new TelegramBot(process.env.BOT_TOKEN);
@@ -50,7 +38,11 @@ const webhookPath = `/bot${process.env.BOT_TOKEN}`;
 const webhookURL = `${domain}${webhookPath}`;
 
 // Set the webhook
-bot.setWebHook(webhookURL);
+bot.setWebHook(webhookURL).then(() => {
+  console.log('Webhook set successfully');
+}).catch((err) => {
+  console.error('Error setting webhook:', err);
+});
 
 // Middleware to handle webhook requests
 app.post(webhookPath, (req, res) => {
