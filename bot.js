@@ -16,6 +16,7 @@ mongoose.connect(process.env.MONGODB_URI, {
 bot.onText(/\/verify/, async (msg) => {
   const chatId = msg.chat.id;
   const telegramId = msg.from.id;
+  const telegramUsername = msg.from.username; // Get the user's Telegram username
 
   try {
     // Check if the user is a member of the channel
@@ -31,7 +32,7 @@ bot.onText(/\/verify/, async (msg) => {
         // Register the user
         const referralCode = generateReferralCode();
 
-        user = new User({ telegramId, referralCode, referrals: 0 });
+        user = new User({ telegramId, telegramUsername, referralCode, referrals: 0 });
         await user.save();
 
         bot.sendMessage(chatId, 'Verification successful! You can now proceed to the website.');
