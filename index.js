@@ -4,7 +4,6 @@ require('dotenv').config();
 // Import dependencies
 const express = require('express');
 const mongoose = require('mongoose');
-const TelegramBot = require('node-telegram-bot-api');
 const cors = require('cors');
 
 // Import the User model
@@ -15,7 +14,7 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: 'https://knckd.github.io' // Adjust this to your GitHub Pages domain
+  origin: 'https://knckd.github.io', // Adjust this to your GitHub Pages domain
 }));
 app.use(express.json());
 
@@ -23,85 +22,32 @@ app.use(express.json());
 mongoose.set('strictQuery', true);
 
 // Connect to MongoDB
-mongoose
-  .connect(process.env.MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    serverSelectionTimeoutMS: 5000, // Adjust the timeout as needed
-  })
-  .then(() => console.log('MongoDB connected'))
+mongoose.connect(process.env.MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+}).then(() => console.log('MongoDB connected'))
   .catch((err) => console.error('MongoDB connection error:', err));
 
-// Initialize Telegram Bot without polling
-const bot = new TelegramBot(process.env.BOT_TOKEN);
-
-// Set up webhook
-const domain = process.env.DOMAIN; // Ensure this environment variable is set to your backend URL
-const webhookPath = `/bot${process.env.BOT_TOKEN}`;
-const webhookURL = `${domain}${webhookPath}`;
-
-// Set the webhook
-bot.setWebHook(webhookURL)
-  .then(() => {
-    console.log('Webhook set successfully');
-  })
-  .catch((err) => {
-    console.error('Error setting webhook:', err);
-  });
-
-// Middleware to handle webhook requests
-app.post(webhookPath, (req, res) => {
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
-
-// Function to generate a unique referral code
-function generateReferralCode() {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
-}
-
-// Endpoint to verify Telegram membership and register the user
+// Endpoint to verify user on the website
 app.post('/api/verify', async (req, res) => {
   const { telegramUsername } = req.body;
 
   try {
-    // Get the user's Telegram ID
-    const userInfo = await bot.getChat(`@${telegramUsername}`);
-    const telegramId = userInfo.id;
+    // Retrieve the user's Telegram ID based on the username
+    // Note: Telegram doesn't allow bots to get user info by username
+    // So we need to find the user in our database
 
-    // Check if the user is already registered
-    let user = await User.findOne({ telegramId });
+    const user = await User.findOne({ telegramUsername });
 
     if (user) {
-      // User is already registered
+      // User is verified
       return res.json({ success: true, referralCode: user.referralCode });
-    }
-
-    // Check if the user is a member of the channel
-    const chatMember = await bot.getChatMember(process.env.CHANNEL_ID, telegramId);
-
-    if (['member', 'administrator', 'creator'].includes(chatMember.status)) {
-      // User is a member, register them
-      const referralCode = generateReferralCode();
-
-      user = new User({ telegramId, referralCode, referrals: 0 });
-      await user.save();
-
-      return res.json({ success: true, referralCode });
     } else {
-      // User is not a member
-      return res.json({ success: false, message: 'Please join the Telegram channel first.' });
+      // User not found
+      return res.json({ success: false, message: 'Please send /verify to the bot first.' });
     }
   } catch (error) {
     console.error('Verification Error:', error);
-
-    // Handle specific Telegram errors
-    if (error.response && error.response.statusCode === 400) {
-      return res.json({ success: false, message: 'Invalid Telegram username. Please ensure you entered it correctly.' });
-    } else if (error.response && error.response.statusCode === 403) {
-      return res.json({ success: false, message: 'Please start a chat with the bot on Telegram and try again.' });
-    }
-
     res.status(500).json({ success: false, message: 'An error occurred during verification.' });
   }
 });
