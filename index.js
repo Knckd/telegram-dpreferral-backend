@@ -6,6 +6,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const TelegramBot = require('node-telegram-bot-api');
 const cors = require('cors');
+const bodyParser = require('body-parser');
 
 // Import the User model
 const User = require('./models/User');
@@ -15,9 +16,9 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: 'https://knckd.github.io/telegram-dpreferral-frontend'
+  origin: 'https://knckd.github.io'
 }));
-app.use(express.json());
+app.use(bodyParser.json());
 
 // Connect to MongoDB
 mongoose
@@ -28,8 +29,22 @@ mongoose
   .then(() => console.log('MongoDB connected'))
   .catch((err) => console.log(err));
 
-// Initialize Telegram Bot
-const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
+// Initialize Telegram Bot without polling
+const bot = new TelegramBot(process.env.BOT_TOKEN);
+
+// Set up webhook
+const domain = process.env.DOMAIN; // Your Render domain, e.g., 'https://your-app.onrender.com'
+const webhookPath = `/bot${process.env.BOT_TOKEN}`;
+const webhookURL = `${domain}${webhookPath}`;
+
+// Set the webhook
+bot.setWebHook(webhookURL);
+
+// Middleware to handle webhook requests
+app.post(webhookPath, (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
 
 // Function to generate a unique referral code
 function generateReferralCode() {
@@ -60,7 +75,7 @@ app.post('/api/verify', async (req, res) => {
       // User is a member, register them
       const referralCode = generateReferralCode();
 
-      user = new User({ telegramId, referralCode });
+      user = new User({ telegramId, referralCode, referrals: 0 });
       await user.save();
 
       return res.json({ success: true, referralCode });
@@ -69,7 +84,7 @@ app.post('/api/verify', async (req, res) => {
       return res.json({ success: false, message: 'Please join the Telegram channel first.' });
     }
   } catch (error) {
-    console.error(error);
+    console.error('Verification Error:', error);
     res.status(500).json({ success: false, message: 'An error occurred during verification.' });
   }
 });
@@ -89,11 +104,13 @@ app.post('/api/referral', async (req, res) => {
       return res.json({ success: false, message: 'Invalid referral code.' });
     }
   } catch (error) {
-    console.error(error);
+    console.error('Referral Error:', error);
     res.status(500).json({ success: false, message: 'An error occurred while processing the referral.' });
   }
 });
 
 // Start the server
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
