@@ -15,9 +15,12 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: 'https://knckd.github.io' // Adjust this to your GitHub Pages URL
+  origin: 'https://knckd.github.io/telegram-dpreferral-frontend/' // Adjust this to your GitHub Pages URL
 }));
 app.use(express.json());
+
+// Set mongoose strictQuery to true
+mongoose.set('strictQuery', true);
 
 // Connect to MongoDB
 mongoose
@@ -92,7 +95,9 @@ app.post('/api/verify', async (req, res) => {
 
     // Handle specific Telegram errors
     if (error.response && error.response.statusCode === 400) {
-      return res.json({ success: false, message: 'Invalid Telegram username. Please ensure you entered it correctly.' });
+      return res.json({ success: false, message: 'Invalid Telegram username or the bot has not interacted with you. Please start a chat with the bot on Telegram and try again.' });
+    } else if (error.response && error.response.statusCode === 403) {
+      return res.json({ success: false, message: 'Please start a chat with the bot on Telegram and try again.' });
     }
 
     res.status(500).json({ success: false, message: 'An error occurred during verification.' });
