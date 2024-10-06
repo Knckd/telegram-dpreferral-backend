@@ -15,7 +15,7 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: 'https://github.com/Knckd'
+  origin: 'https://knckd.github.io/telegram-dpreferral-frontend'
 }));
 app.use(express.json());
 
