@@ -15,7 +15,7 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: 'https://knckd.github.io/telegram-dpreferral-frontend/' // Adjust this to your GitHub Pages URL
+  origin: 'https://knckd.github.io' // Adjust this to your GitHub Pages domain
 }));
 app.use(express.json());
 
@@ -36,16 +36,18 @@ mongoose
 const bot = new TelegramBot(process.env.BOT_TOKEN);
 
 // Set up webhook
-const domain = process.env.DOMAIN; // Ensure this environment variable is set
+const domain = process.env.DOMAIN; // Ensure this environment variable is set to your backend URL
 const webhookPath = `/bot${process.env.BOT_TOKEN}`;
 const webhookURL = `${domain}${webhookPath}`;
 
 // Set the webhook
-bot.setWebHook(webhookURL).then(() => {
-  console.log('Webhook set successfully');
-}).catch((err) => {
-  console.error('Error setting webhook:', err);
-});
+bot.setWebHook(webhookURL)
+  .then(() => {
+    console.log('Webhook set successfully');
+  })
+  .catch((err) => {
+    console.error('Error setting webhook:', err);
+  });
 
 // Middleware to handle webhook requests
 app.post(webhookPath, (req, res) => {
@@ -95,7 +97,7 @@ app.post('/api/verify', async (req, res) => {
 
     // Handle specific Telegram errors
     if (error.response && error.response.statusCode === 400) {
-      return res.json({ success: false, message: 'Invalid Telegram username or the bot has not interacted with you. Please start a chat with the bot on Telegram and try again.' });
+      return res.json({ success: false, message: 'Invalid Telegram username. Please ensure you entered it correctly.' });
     } else if (error.response && error.response.statusCode === 403) {
       return res.json({ success: false, message: 'Please start a chat with the bot on Telegram and try again.' });
     }
