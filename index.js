@@ -15,32 +15,28 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: 'https://knckd.github.io', // Adjust this to your GitHub Pages domain
+  origin: 'https://knckd.github.io', // Your GitHub Pages domain
 }));
 app.use(express.json());
 
-// Set mongoose strictQuery to true
-mongoose.set('strictQuery', true);
-
 // Connect to MongoDB
-mongoose
-  .connect(process.env.MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
+mongoose.connect(process.env.MONGODB_URI, {
+  dbName: 'test', // Specify the database name if necessary
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
   .then(() => console.log('MongoDB connected'))
   .catch((err) => console.error('MongoDB connection error:', err));
 
-// Initialize Telegram Bot
-const bot = new TelegramBot(process.env.BOT_TOKEN);
+// Initialize Telegram Bot with webhook
+const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: false });
 
-// Use Webhook for Telegram Bot
-const domain = process.env.DOMAIN; // Ensure this environment variable is set to your backend URL
-const port = process.env.PORT || 5000;
+// Set up webhook
+const domain = process.env.DOMAIN; // Your backend URL (e.g., 'https://telegram-dpreferral-backend.onrender.com')
 const webhookPath = `/bot${process.env.BOT_TOKEN}`;
 const webhookURL = `${domain}${webhookPath}`;
 
-// Set the bot webhook
+// Set the webhook
 bot.setWebHook(webhookURL)
   .then(() => {
     console.log('Webhook set successfully');
@@ -49,17 +45,27 @@ bot.setWebHook(webhookURL)
     console.error('Error setting webhook:', err);
   });
 
-// Express route to handle webhook requests from Telegram
-app.post(`/bot${process.env.BOT_TOKEN}`, (req, res) => {
+// Middleware to handle webhook requests
+app.post(webhookPath, (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
 
-// Handle '/verify' command
+// Function to generate a unique referral code
+function generateReferralCode() {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+// Handle '/verify' command from users in Telegram
 bot.onText(/\/verify/, async (msg) => {
   const chatId = msg.chat.id;
   const telegramId = msg.from.id;
-  const telegramUsername = msg.from.username; // Get the user's Telegram username
+  const telegramUsername = msg.from.username ? msg.from.username.toLowerCase() : null;
+
+  if (!telegramUsername) {
+    bot.sendMessage(chatId, 'You need to set a Telegram username in your profile settings to use this verification system.');
+    return;
+  }
 
   try {
     // Check if the user is a member of the channel
@@ -75,7 +81,12 @@ bot.onText(/\/verify/, async (msg) => {
         // Register the user
         const referralCode = generateReferralCode();
 
-        user = new User({ telegramId, telegramUsername, referralCode, referrals: 0 });
+        user = new User({
+          telegramId,
+          telegramUsername,
+          referralCode,
+          referrals: 0,
+        });
         await user.save();
 
         bot.sendMessage(chatId, 'Verification successful! You can now proceed to the website.');
@@ -89,23 +100,22 @@ bot.onText(/\/verify/, async (msg) => {
   }
 });
 
-// Function to generate a unique referral code
-function generateReferralCode() {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
-}
-
 // Endpoint to verify user on the website
 app.post('/api/verify', async (req, res) => {
-  const { telegramUsername } = req.body;
+  let { telegramUsername } = req.body;
+  telegramUsername = telegramUsername.toLowerCase();
+
+  console.log('Verification attempt for username:', telegramUsername);
 
   try {
-    // Find the user by telegramUsername
     const user = await User.findOne({ telegramUsername });
 
     if (user) {
+      console.log('User found:', user);
       // User is verified
       return res.json({ success: true, referralCode: user.referralCode });
     } else {
+      console.log('User not found in the database.');
       // User not found
       return res.json({ success: false, message: 'Please send /verify to the bot first.' });
     }
@@ -136,6 +146,7 @@ app.post('/api/referral', async (req, res) => {
 });
 
 // Start the server
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
