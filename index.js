@@ -84,15 +84,21 @@ mongoose.connect(process.env.MONGODB_URI, {
           let user = await User.findOne({ telegramId });
 
           if (user) {
+            // Ensure that the user's telegramUsername is saved in the database
+            if (!user.telegramUsername) {
+              user.telegramUsername = telegramUsername; // Add missing username if not present
+              await user.save();
+              console.log('Added telegramUsername to existing user:', user);
+            }
             bot.sendMessage(chatId, 'You have already been verified. You can proceed to the website.');
             console.log('User already verified:', user);
           } else {
-            // Register the user
+            // Register the user with both telegramId and telegramUsername
             const referralCode = generateReferralCode();
 
             user = new User({
               telegramId,
-              telegramUsername,
+              telegramUsername,  // Ensure username is saved
               referralCode,
               referrals: 0,
             });
@@ -117,7 +123,7 @@ mongoose.connect(process.env.MONGODB_URI, {
     // Endpoint to verify user on the website
     app.post('/api/verify', async (req, res) => {
       let { telegramUsername } = req.body;
-      telegramUsername = telegramUsername.toLowerCase();
+      telegramUsername = telegramUsername.toLowerCase(); // Ensure case-insensitive matching
 
       console.log('Verification attempt for username:', telegramUsername);
 
