@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
   telegramId: { type: String, unique: true },
-  telegramUsername: { type: String, unique: true },
+  telegramUsername: { type: String, unique: true, lowercase: true },
   referralCode: { type: String, unique: true },
   referrals: { type: Number, default: 0 },
 });
