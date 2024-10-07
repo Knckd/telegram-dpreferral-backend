@@ -76,21 +76,21 @@ mongoose.connect(process.env.MONGODB_URI, {
       }
 
       try {
-        // Check if the user is a member of the channel
+        // Check if the user is a member of the required Telegram channel
         const chatMember = await bot.getChatMember(process.env.CHANNEL_ID, telegramId);
 
         if (['member', 'administrator', 'creator'].includes(chatMember.status)) {
-          // Check if the user is already registered
+          // User is a member, proceed with verification
           let user = await User.findOne({ telegramId });
 
           if (user) {
-            // Ensure that the user's telegramUsername is saved in the database
+            // Ensure the user's telegramUsername is saved in the database
             if (!user.telegramUsername) {
               user.telegramUsername = telegramUsername; // Add missing username if not present
               await user.save();
               console.log('Added telegramUsername to existing user:', user);
             }
-            bot.sendMessage(chatId, 'You have already been verified. You can proceed to the website.');
+            bot.sendMessage(chatId, 'You have already been verified. You can proceed to the website to get your referral link.');
             console.log('User already verified:', user);
           } else {
             // Register the user with both telegramId and telegramUsername
@@ -107,11 +107,12 @@ mongoose.connect(process.env.MONGODB_URI, {
 
             await user.save();
 
-            bot.sendMessage(chatId, 'Verification successful! You can now proceed to the website.');
+            bot.sendMessage(chatId, 'Verification successful! You can now proceed to the website to retrieve your referral link.');
             console.log('User saved successfully:', user);
           }
         } else {
-          bot.sendMessage(chatId, 'Please join the Telegram channel first.');
+          // User is not a member of the required Telegram channel
+          bot.sendMessage(chatId, `Please join our Telegram channel first: https://t.me/YourChannelUsername and then send /verify again.`);
           console.log('User is not a member of the channel.');
         }
       } catch (error) {
