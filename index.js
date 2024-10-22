@@ -165,5 +165,25 @@ mongoose.connect(process.env.MONGODB_URI, {
         res.status(500).json({ success: false, message: 'An error occurred while processing the referral.' });
       }
     });
+
+    // New endpoint to handle chaos initiation
+    app.post('/api/startChaos', async (req, res) => {
+      const { message } = req.body;
+
+      try {
+        // Sample message to user after chaos starts (this will trigger the bot)
+        const chatId = process.env.DEFAULT_CHAT_ID; // Replace with actual logic to get the user's chat ID
+        
+        // Send messages via the Telegram bot when chaos starts
+        bot.sendMessage(chatId, 'Chaos has been initiated! Enjoy the madness!');
+        bot.sendMessage(chatId, 'Here is another chaotic message just for fun!');
+
+        console.log('Chaos event triggered:', message);
+        res.json({ success: true, message: 'Chaos initiated and messages sent!' });
+      } catch (error) {
+        console.error('Error triggering chaos:', error);
+        res.status(500).json({ success: false, message: 'Chaos initiation failed.' });
+      }
+    });
   })
   .catch((err) => console.error('MongoDB connection error:', err));
