@@ -24,7 +24,7 @@ app.use(cors({
 }));
 
 // Validate environment variables
-const requiredEnvVars = ['PORT', 'MONGO_URI', 'BOT_TOKEN', 'FRONTEND_URL', 'DOMAIN'];
+const requiredEnvVars = ['PORT', 'MONGO_URI', 'BOT_TOKEN', 'FRONTEND_URL', 'DOMAIN', 'CHANNEL_ID'];
 const missingEnvVars = requiredEnvVars.filter((envVar) => !process.env[envVar]);
 
 if (missingEnvVars.length > 0) {
@@ -265,6 +265,16 @@ cron.schedule('0 9 * * *', async () => {
 
 // Start Express server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+
+const server = app.listen(PORT, () => {
   console.log(`🚀 Server is running on port ${PORT}`);
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`❌ Port ${PORT} is already in use. Please stop other instances or use a different port.`);
+  } else {
+    console.error('❌ Server error:', err);
+  }
+  process.exit(1); // Exit the process to avoid unexpected behavior
 });
