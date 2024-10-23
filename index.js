@@ -24,7 +24,7 @@ app.use(cors({
 }));
 
 // Validate environment variables
-const requiredEnvVars = ['PORT', 'MONGO_URI', 'BOT_TOKEN', 'FRONTEND_URL'];
+const requiredEnvVars = ['PORT', 'MONGO_URI', 'BOT_TOKEN', 'FRONTEND_URL', 'DOMAIN'];
 const missingEnvVars = requiredEnvVars.filter((envVar) => !process.env[envVar]);
 
 if (missingEnvVars.length > 0) {
@@ -53,15 +53,29 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model('User', userSchema);
 
-// Initialize Telegram Bot
-let bot;
-try {
-  bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
-  console.log('✅ Telegram bot initialized successfully.');
-} catch (error) {
-  console.error('❌ Failed to initialize Telegram bot:', error);
-  process.exit(1);
-}
+// Initialize Telegram Bot with webhook
+const bot = new TelegramBot(process.env.BOT_TOKEN, {
+  webHook: {
+    port: process.env.PORT || 3000,
+  }
+});
+console.log('✅ Telegram bot initialized successfully.');
+
+// Set webhook URL
+const webhookUrl = `${process.env.DOMAIN}/telegram-webhook`;
+bot.setWebHook(webhookUrl)
+  .then(() => {
+    console.log(`✅ Webhook set to ${webhookUrl}`);
+  })
+  .catch((err) => {
+    console.error('❌ Failed to set webhook:', err);
+  });
+
+// Express route to handle Telegram webhook
+app.post('/telegram-webhook', (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
 
 // Helper function to generate referral codes
 const generateReferralCode = () => {
