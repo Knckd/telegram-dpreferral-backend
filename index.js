@@ -187,3 +187,45 @@ mongoose.connect(process.env.MONGODB_URI, {
     });
   })
   .catch((err) => console.error('MongoDB connection error:', err));
+// Add this to your index.js in the backend
+
+// Endpoint to handle token claims
+app.post('/api/claim', async (req, res) => {
+  const { telegramUsername } = req.body;
+
+  if (!telegramUsername) {
+    return res.status(400).json({ success: false, message: 'Telegram username is required.' });
+  }
+
+  try {
+    const user = await User.findOne({ telegramUsername: telegramUsername.toLowerCase() });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found. Please verify first.' });
+    }
+
+    // Check if the user has already claimed tokens
+    if (user.hasClaimed) {
+      return res.json({ success: false, message: 'You have already claimed your tokens.' });
+    }
+
+    // Process the token claim (e.g., interact with Solana blockchain)
+    // This part depends on your specific implementation and requirements
+
+    // Update the user as having claimed tokens
+    user.hasClaimed = true;
+    await user.save();
+
+    res.json({ success: true, message: 'Tokens claimed successfully!' });
+  } catch (error) {
+    console.error('Claim Error:', error);
+    res.status(500).json({ success: false, message: 'An error occurred while processing your claim.' });
+  }
+});
+
+// Optional: Endpoint to notify backend about the claim
+app.post('/api/claimNotification', async (req, res) => {
+  // Implement any additional logic you need when a claim is made
+  res.json({ success: true, message: 'Claim notification received.' });
+});
+
