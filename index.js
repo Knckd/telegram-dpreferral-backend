@@ -86,7 +86,7 @@ bot.onText(/\/verify/, async (msg) => {
     } else {
       // Prompt user for referral code
       userStates[chatId] = 'awaitingReferralCode';
-      bot.sendMessage(chatId, '🔍 Please enter your referral code to verify:');
+      bot.sendMessage(chatId, '🔍 Please enter your referral code to verify (if any). If you do not have one, simply reply with "NONE".');
     }
   } catch (error) {
     console.error('Error checking user:', error);
@@ -100,12 +100,11 @@ bot.on('message', async (msg) => {
 
   // Check if we are expecting a referral code from this user
   if (userStates[chatId] === 'awaitingReferralCode') {
-    const referralCodeInput = msg.text.trim();
+    let referralCodeInput = msg.text.trim().toUpperCase();
 
-    if (!referralCodeInput) {
-      bot.sendMessage(chatId, '❌ Referral code cannot be empty. Please try /verify again.');
-      delete userStates[chatId];
-      return;
+    // Handle cases where user does not have a referral code
+    if (referralCodeInput === 'NONE') {
+      referralCodeInput = null;
     }
 
     const username = msg.from.username;
@@ -117,6 +116,16 @@ bot.on('message', async (msg) => {
     }
 
     try {
+      let referringUser = null;
+      if (referralCodeInput) {
+        referringUser = await User.findOne({ referralCode: referralCodeInput });
+        if (!referringUser) {
+          bot.sendMessage(chatId, '❌ Referral code not found. Please try /verify again.');
+          delete userStates[chatId];
+          return;
+        }
+      }
+
       // Generate a unique referral code for the user
       let newReferralCode;
       let isUnique = false;
@@ -134,6 +143,13 @@ bot.on('message', async (msg) => {
       });
 
       await user.save();
+
+      // Increment referrals count for referring user
+      if (referringUser) {
+        referringUser.referrals += 1;
+        await referringUser.save();
+        bot.sendMessage(referringUser.telegramId, `🎁 Someone used your referral code! Thank you for spreading the word!`);
+      }
 
       bot.sendMessage(chatId, '🎉 Verification successful! You will start receiving daily updates from Double Penis.');
 
