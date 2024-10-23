@@ -56,6 +56,8 @@ const User = mongoose.model('User', userSchema);
 // Initialize Telegram Bot without specifying a port
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: false });
 
+console.log('✅ Telegram bot initialized successfully.');
+
 // Set webhook URL
 const webhookUrl = `${process.env.DOMAIN}/telegram-webhook`;
 bot.setWebHook(webhookUrl)
@@ -155,12 +157,14 @@ bot.on('message', async (msg) => {
       });
 
       await user.save();
+      console.log(`✅ User "${username}" saved to database with referral code "${newReferralCode}".`);
 
       // Increment referrals count for referring user
       if (referringUser) {
         referringUser.referrals += 1;
         await referringUser.save();
         bot.sendMessage(referringUser.telegramId, `🎁 Someone used your referral code! Thank you for spreading the word!`);
+        console.log(`✅ Referral count incremented for user "${referringUser.telegramUsername}".`);
       }
 
       bot.sendMessage(chatId, '🎉 Verification successful! You will start receiving daily updates from Double Penis.');
@@ -228,9 +232,7 @@ app.post('/api/startChaos', async (req, res) => {
 
     // Send "Gotcha" message to the user
     await bot.sendMessage(user.telegramId, 'HAHA, Gotcha! Refer more people to claim your free token!');
-
-    // Optionally, log this event
-    console.log(`🌀 Chaos initiated by user: ${user.telegramUsername}`);
+    console.log(`✅ "Gotcha" message sent to user "${user.telegramUsername}" (Telegram ID: ${user.telegramId}).`);
 
     res.json({ success: true, message: '✅ Chaos initiated successfully.' });
 
@@ -248,8 +250,9 @@ cron.schedule('0 9 * * *', async () => {
     for (const user of users) {
       try {
         await bot.sendMessage(user.telegramId, '📢 Good morning! Here is your daily update from Double Penis.');
+        console.log(`✅ Daily message sent to "${user.telegramUsername}" (Telegram ID: ${user.telegramId}).`);
       } catch (error) {
-        console.error(`Error sending daily message to ${user.telegramUsername}:`, error);
+        console.error(`Error sending daily message to "${user.telegramUsername}":`, error);
       }
     }
     console.log('✅ Daily messages sent successfully.');
