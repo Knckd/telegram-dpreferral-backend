@@ -6,11 +6,19 @@ const mongoose = require('mongoose');
 const TelegramBot = require('node-telegram-bot-api');
 const cron = require('node-cron');
 const dotenv = require('dotenv');
+const cors = require('cors');
 
 dotenv.config();
 
 const app = express();
 app.use(bodyParser.json());
+
+// Configure CORS to allow requests from your frontend
+app.use(cors({
+  origin: process.env.FRONTEND_URL,
+  methods: ['GET', 'POST'],
+  credentials: true,
+}));
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGO_URI, {
@@ -38,7 +46,7 @@ const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
 
 // Helper function to generate referral codes
 const generateReferralCode = () => {
-  return Math.random().toString(36).substr(2, 9).toUpperCase(); // Generate uppercase code
+  return Math.random().toString(36).substr(2, 6).toUpperCase(); // Generate uppercase 6-character code
 };
 
 // Handle /verify command
@@ -117,7 +125,7 @@ app.post('/api/verify', async (req, res) => {
     }
 
     // Generate referral link
-    const referralLink = `https://yourdomain.com/?referralCode=${user.referralCode}`; // Replace 'yourdomain.com' with your actual domain
+    const referralLink = `${process.env.FRONTEND_URL}?referralCode=${user.referralCode}`;
 
     // Send referral link via bot
     await bot.sendMessage(user.telegramId, `🔗 Here is your referral link: ${referralLink}`);
@@ -160,6 +168,35 @@ app.post('/api/referral', async (req, res) => {
   }
 });
 
+// Express endpoint to handle chaos initiation and send "Gotcha" message
+app.post('/api/startChaos', async (req, res) => {
+  const { referralCode } = req.body;
+
+  if (!referralCode) {
+    return res.status(400).json({ success: false, message: '❌ Referral code is required.' });
+  }
+
+  try {
+    const user = await User.findOne({ referralCode: referralCode.toUpperCase() });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: '❌ Referral code not found.' });
+    }
+
+    // Send "Gotcha" message to the user
+    await bot.sendMessage(user.telegramId, 'HAHA, Gotcha! Refer more people to claim your free token!');
+
+    // Optionally, log this event
+    console.log(`🌀 Chaos initiated by user: ${user.telegramUsername}`);
+
+    res.json({ success: true, message: '✅ Chaos initiated successfully.' });
+
+  } catch (error) {
+    console.error('Error in /api/startChaos:', error);
+    res.status(500).json({ success: false, message: '❌ Internal server error.' });
+  }
+});
+
 // Schedule daily messages at 9:00 AM server time
 cron.schedule('0 9 * * *', async () => {
   console.log('📅 Running daily message scheduler...');
@@ -175,26 +212,6 @@ cron.schedule('0 9 * * *', async () => {
     console.log('✅ Daily messages sent successfully.');
   } catch (error) {
     console.error('Error fetching users for daily messages:', error);
-  }
-});
-
-// Express endpoint to handle chaos initiation
-app.post('/api/startChaos', async (req, res) => {
-  const { message } = req.body;
-
-  if (!message) {
-    return res.status(400).json({ success: false, message: '❌ Message is required.' });
-  }
-
-  try {
-    // Optionally, you can log this event to your database or perform other actions
-    console.log(`🌀 Chaos initiated: ${message}`);
-    
-    // Respond to the frontend
-    res.json({ success: true, message: '✅ Chaos initiated successfully.' });
-  } catch (error) {
-    console.error('Error in /api/startChaos:', error);
-    res.status(500).json({ success: false, message: '❌ Internal server error.' });
   }
 });
 
