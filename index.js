@@ -1,7 +1,6 @@
 // index.js
 
 const express = require('express');
-const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
 const TelegramBot = require('node-telegram-bot-api');
 const cron = require('node-cron');
@@ -14,9 +13,9 @@ dotenv.config();
 mongoose.set('strictQuery', false);
 
 const app = express();
-app.use(bodyParser.json());
 
-// Configure CORS to allow requests from your frontend
+// Middleware
+app.use(express.json()); // Built-in body parser
 app.use(cors({
   origin: process.env.FRONTEND_URL,
   methods: ['GET', 'POST'],
@@ -25,7 +24,7 @@ app.use(cors({
 
 // Validate environment variables
 const requiredEnvVars = ['MONGO_URI', 'BOT_TOKEN', 'FRONTEND_URL', 'DOMAIN', 'CHANNEL_ID'];
-const missingEnvVars = requiredEnvVars.filter((envVar) => !process.env[envVar]);
+const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
 
 if (missingEnvVars.length > 0) {
   console.error(`❌ Missing required environment variables: ${missingEnvVars.join(', ')}`);
@@ -38,7 +37,7 @@ mongoose.connect(process.env.MONGO_URI, {
   useUnifiedTopology: true,
 })
 .then(() => console.log('✅ Connected to MongoDB'))
-.catch((err) => {
+.catch(err => {
   console.error('❌ MongoDB connection error:', err);
   process.exit(1);
 });
@@ -53,7 +52,7 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model('User', userSchema);
 
-// Initialize Telegram Bot without specifying a port
+// Initialize Telegram Bot without polling
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: false });
 
 console.log('✅ Telegram bot initialized successfully.');
@@ -64,7 +63,7 @@ bot.setWebHook(webhookUrl)
   .then(() => {
     console.log(`✅ Webhook set to ${webhookUrl}`);
   })
-  .catch((err) => {
+  .catch(err => {
     console.error('❌ Failed to set webhook:', err);
   });
 
@@ -87,8 +86,11 @@ bot.onText(/\/verify/, async (msg) => {
   const chatId = msg.chat.id;
   const username = msg.from.username;
 
+  console.log(`📩 Received /verify command from Telegram ID: ${chatId}, Username: ${username}`);
+
   if (!username) {
     bot.sendMessage(chatId, '❌ Please set a username in Telegram to use this feature.');
+    console.log(`❌ Telegram ID: ${chatId} has no username set.`);
     return;
   }
 
@@ -97,13 +99,15 @@ bot.onText(/\/verify/, async (msg) => {
     const existingUser = await User.findOne({ telegramUsername: username.toLowerCase() });
     if (existingUser) {
       bot.sendMessage(chatId, '✅ You have already been verified.');
+      console.log(`✅ Telegram ID: ${chatId} is already verified.`);
     } else {
       // Prompt user for referral code
       userStates[chatId] = 'awaitingReferralCode';
       bot.sendMessage(chatId, '🔍 Please enter your referral code to verify (if any). If you do not have one, simply reply with "NONE".');
+      console.log(`🔍 Prompted Telegram ID: ${chatId} for referral code.`);
     }
   } catch (error) {
-    console.error('Error checking user:', error);
+    console.error(`❌ Error checking user for Telegram ID: ${chatId}`, error);
     bot.sendMessage(chatId, '❌ An error occurred during verification. Please try again later.');
   }
 });
@@ -116,6 +120,8 @@ bot.on('message', async (msg) => {
   if (userStates[chatId] === 'awaitingReferralCode') {
     let referralCodeInput = msg.text.trim().toUpperCase();
 
+    console.log(`📥 Received referral code from Telegram ID: ${chatId}: ${referralCodeInput}`);
+
     // Handle cases where user does not have a referral code
     if (referralCodeInput === 'NONE') {
       referralCodeInput = null;
@@ -125,6 +131,7 @@ bot.on('message', async (msg) => {
 
     if (!username) {
       bot.sendMessage(chatId, '❌ Please set a username in Telegram to use this feature.');
+      console.log(`❌ Telegram ID: ${chatId} has no username set.`);
       delete userStates[chatId];
       return;
     }
@@ -135,6 +142,7 @@ bot.on('message', async (msg) => {
         referringUser = await User.findOne({ referralCode: referralCodeInput });
         if (!referringUser) {
           bot.sendMessage(chatId, '❌ Referral code not found. Please try /verify again.');
+          console.log(`❌ Referral code "${referralCodeInput}" not found for Telegram ID: ${chatId}`);
           delete userStates[chatId];
           return;
         }
@@ -168,9 +176,10 @@ bot.on('message', async (msg) => {
       }
 
       bot.sendMessage(chatId, '🎉 Verification successful! You will start receiving daily updates from Double Penis.');
+      console.log(`🎉 Verification successful for Telegram ID: ${chatId}`);
 
     } catch (error) {
-      console.error('Error saving user:', error);
+      console.error(`❌ Error saving user for Telegram ID: ${chatId}`, error);
       bot.sendMessage(chatId, '❌ An error occurred during verification. Please try again later.');
     }
 
@@ -183,34 +192,36 @@ bot.on('message', async (msg) => {
 app.post('/api/verify', async (req, res) => {
   const { telegramUsername } = req.body;
 
+  console.log(`🔍 /api/verify called with Telegram Username: "${telegramUsername}"`);
+
   if (!telegramUsername) {
-    console.error('Verification failed: Telegram username not provided.');
+    console.error('❌ Verification failed: Telegram username not provided.');
     return res.status(400).json({ success: false, message: '❌ Telegram username is required.' });
   }
 
   try {
     const normalizedUsername = telegramUsername.toLowerCase();
-    console.log(`Attempting to verify user: ${normalizedUsername}`);
+    console.log(`🔍 Attempting to verify user: "${normalizedUsername}"`);
 
     const user = await User.findOne({ telegramUsername: normalizedUsername });
 
     if (!user) {
-      console.error(`Verification failed: User "${normalizedUsername}" not found.`);
+      console.error(`❌ Verification failed: User "${normalizedUsername}" not found.`);
       return res.status(404).json({ success: false, message: '❌ User not found. Please verify via the Telegram bot first.' });
     }
 
     // Generate referral link
     const referralLink = `${process.env.FRONTEND_URL}?referralCode=${user.referralCode}`;
-    console.log(`Generated referral link for user "${normalizedUsername}": ${referralLink}`);
+    console.log(`🔗 Generated referral link for user "${normalizedUsername}": ${referralLink}`);
 
     // Send referral link via bot
     await bot.sendMessage(user.telegramId, `🔗 Here is your referral link: ${referralLink}`);
-    console.log(`Referral link sent to user "${normalizedUsername}" (Telegram ID: ${user.telegramId})`);
+    console.log(`✅ Referral link sent to user "${normalizedUsername}" (Telegram ID: ${user.telegramId})`);
 
     res.json({ success: true, referralLink });
 
   } catch (error) {
-    console.error(`Error in /api/verify for user "${telegramUsername}":`, error);
+    console.error(`❌ Error in /api/verify for user "${telegramUsername}":`, error);
     res.status(500).json({ success: false, message: '❌ Internal server error.' });
   }
 });
@@ -219,7 +230,10 @@ app.post('/api/verify', async (req, res) => {
 app.post('/api/startChaos', async (req, res) => {
   const { referralCode } = req.body;
 
+  console.log(`🌀 /api/startChaos called with Referral Code: "${referralCode}"`);
+
   if (!referralCode) {
+    console.error('❌ Chaos initiation failed: Referral code not provided.');
     return res.status(400).json({ success: false, message: '❌ Referral code is required.' });
   }
 
@@ -227,6 +241,7 @@ app.post('/api/startChaos', async (req, res) => {
     const user = await User.findOne({ referralCode: referralCode.toUpperCase() });
 
     if (!user) {
+      console.error(`❌ Chaos initiation failed: Referral code "${referralCode}" not found.`);
       return res.status(404).json({ success: false, message: '❌ Referral code not found.' });
     }
 
@@ -237,7 +252,7 @@ app.post('/api/startChaos', async (req, res) => {
     res.json({ success: true, message: '✅ Chaos initiated successfully.' });
 
   } catch (error) {
-    console.error('Error in /api/startChaos:', error);
+    console.error('❌ Error in /api/startChaos:', error);
     res.status(500).json({ success: false, message: '❌ Internal server error.' });
   }
 });
@@ -252,12 +267,12 @@ cron.schedule('0 9 * * *', async () => {
         await bot.sendMessage(user.telegramId, '📢 Good morning! Here is your daily update from Double Penis.');
         console.log(`✅ Daily message sent to "${user.telegramUsername}" (Telegram ID: ${user.telegramId}).`);
       } catch (error) {
-        console.error(`Error sending daily message to "${user.telegramUsername}":`, error);
+        console.error(`❌ Error sending daily message to "${user.telegramUsername}":`, error);
       }
     }
     console.log('✅ Daily messages sent successfully.');
   } catch (error) {
-    console.error('Error fetching users for daily messages:', error);
+    console.error('❌ Error fetching users for daily messages:', error);
   }
 });
 
