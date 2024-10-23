@@ -24,7 +24,7 @@ app.use(cors({
 }));
 
 // Validate environment variables
-const requiredEnvVars = ['PORT', 'MONGO_URI', 'BOT_TOKEN', 'FRONTEND_URL', 'DOMAIN', 'CHANNEL_ID'];
+const requiredEnvVars = ['MONGO_URI', 'BOT_TOKEN', 'FRONTEND_URL', 'DOMAIN', 'CHANNEL_ID'];
 const missingEnvVars = requiredEnvVars.filter((envVar) => !process.env[envVar]);
 
 if (missingEnvVars.length > 0) {
@@ -53,13 +53,8 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model('User', userSchema);
 
-// Initialize Telegram Bot with webhook
-const bot = new TelegramBot(process.env.BOT_TOKEN, {
-  webHook: {
-    port: process.env.PORT || 3000,
-  }
-});
-console.log('✅ Telegram bot initialized successfully.');
+// Initialize Telegram Bot without specifying a port
+const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: false });
 
 // Set webhook URL
 const webhookUrl = `${process.env.DOMAIN}/telegram-webhook`;
