@@ -2,10 +2,10 @@
 
 require('dotenv').config();
 const express = require('express');
+const path = require('path');
 const mongoose = require('mongoose');
 const TelegramBot = require('node-telegram-bot-api');
 const cors = require('cors');
-const path = require('path');
 const User = require('./models/User');
 
 // Initialize Express App
@@ -18,10 +18,9 @@ app.use(cors({
   methods: ['GET', 'POST'],
   credentials: true,
 }));
-app.use(express.static(path.join(__dirname, 'public')));
 
 // Validate Environment Variables
-const requiredEnvVars = ['MONGO_URI', 'BOT_TOKEN', 'FRONTEND_URL', 'DOMAIN', 'CHANNEL_ID'];
+const requiredEnvVars = ['MONGODB_URI', 'BOT_TOKEN', 'FRONTEND_URL', 'DOMAIN', 'CHANNEL_ID'];
 const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
 
 if (missingEnvVars.length > 0) {
@@ -30,7 +29,7 @@ if (missingEnvVars.length > 0) {
 }
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGO_URI, {
+mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
@@ -40,38 +39,11 @@ mongoose.connect(process.env.MONGO_URI, {
   process.exit(1);
 });
 
-// Initialize Telegram Bot with Webhook
-const bot = new TelegramBot(process.env.BOT_TOKEN, { webHook: true });
+// Initialize Telegram Bot
+const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
+console.log('✅ Telegram bot initialized with polling enabled.');
 
-// Set Webhook
-const webhookURL = `${process.env.DOMAIN}/telegram-webhook`;
-bot.setWebHook(webhookURL)
-  .then(() => {
-    console.log(`✅ Webhook set to ${webhookURL}`);
-  })
-  .catch(err => {
-    console.error('❌ Failed to set webhook:', err);
-  });
-
-// Handle Telegram Webhook
-app.post('/telegram-webhook', (req, res) => {
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
-
-// Helper Function to Generate Unique Referral Codes
-const generateReferralCode = async () => {
-  let code;
-  let exists = true;
-  while (exists) {
-    code = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const user = await User.findOne({ referralCode: code });
-    if (!user) exists = false;
-  }
-  return code;
-};
-
-// Handle '/verify' Command from Telegram
+// Handle '/verify' command
 bot.onText(/\/verify/, async (msg) => {
   const chatId = msg.chat.id;
   const telegramId = msg.from.id;
@@ -99,7 +71,7 @@ bot.onText(/\/verify/, async (msg) => {
         console.log(`✅ Telegram ID: ${telegramId} is already verified.`);
       } else {
         // Register the user
-        const referralCode = await generateReferralCode();
+        const referralCode = generateReferralCode();
 
         user = new User({ telegramId, telegramUsername, referralCode, referrals: 0 });
         await user.save();
@@ -116,6 +88,11 @@ bot.onText(/\/verify/, async (msg) => {
     bot.sendMessage(chatId, '❌ An error occurred during verification. Please try again later.');
   }
 });
+
+// Helper Function to Generate Unique Referral Codes
+function generateReferralCode() {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
 
 // Express Endpoint to Handle Verification from Frontend
 app.post('/api/verify', async (req, res) => {
@@ -154,39 +131,17 @@ app.post('/api/verify', async (req, res) => {
   }
 });
 
-// Express Endpoint to Handle Chaos Initiation from Frontend
-app.post('/api/startChaos', async (req, res) => {
-  const { referralCode } = req.body;
+// Serve Frontend Files
+app.use(express.static(path.join(__dirname, '../telegram-dpreferral-frontend')));
 
-  console.log(`🌀 /api/startChaos called with Referral Code: "${referralCode}"`);
-
-  if (!referralCode) {
-    console.error('❌ Chaos initiation failed: Referral code not provided.');
-    return res.status(400).json({ success: false, message: '❌ Referral code is required.' });
-  }
-
-  try {
-    const user = await User.findOne({ referralCode: referralCode.toUpperCase() });
-
-    if (!user) {
-      console.error(`❌ Chaos initiation failed: Referral code "${referralCode}" not found.`);
-      return res.status(404).json({ success: false, message: '❌ Referral code not found.' });
-    }
-
-    // Send "Gotcha" message to the user
-    await bot.sendMessage(user.telegramId, 'HAHA, Gotcha! Refer more people to claim your free token!');
-    console.log(`✅ "Gotcha" message sent to user "${user.telegramUsername}" (Telegram ID: ${user.telegramId}).`);
-
-    res.json({ success: true, message: '✅ Chaos initiated successfully.' });
-  } catch (error) {
-    console.error('❌ Error in /api/startChaos:', error);
-    res.status(500).json({ success: false, message: '❌ Internal server error.' });
-  }
-});
-
-// Serve Frontend HTML (Optional)
+// Serve index.html for the root route
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, '../telegram-dpreferral-frontend', 'index.html'), (err) => {
+    if (err) {
+      console.error('❌ Error serving index.html:', err);
+      res.status(500).send('❌ Error serving the frontend file.');
+    }
+  });
 });
 
 // Start Express Server
