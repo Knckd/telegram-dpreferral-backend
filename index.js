@@ -10,6 +10,9 @@ const cors = require('cors');
 
 dotenv.config();
 
+// Suppress Mongoose strictQuery deprecation warning
+mongoose.set('strictQuery', false);
+
 const app = express();
 app.use(bodyParser.json());
 
@@ -168,26 +171,33 @@ app.post('/api/verify', async (req, res) => {
   const { telegramUsername } = req.body;
 
   if (!telegramUsername) {
+    console.error('Verification failed: Telegram username not provided.');
     return res.status(400).json({ success: false, message: '❌ Telegram username is required.' });
   }
 
   try {
-    const user = await User.findOne({ telegramUsername: telegramUsername.toLowerCase() });
+    const normalizedUsername = telegramUsername.toLowerCase();
+    console.log(`Attempting to verify user: ${normalizedUsername}`);
+
+    const user = await User.findOne({ telegramUsername: normalizedUsername });
 
     if (!user) {
+      console.error(`Verification failed: User "${normalizedUsername}" not found.`);
       return res.status(404).json({ success: false, message: '❌ User not found. Please verify via the Telegram bot first.' });
     }
 
     // Generate referral link
     const referralLink = `${process.env.FRONTEND_URL}?referralCode=${user.referralCode}`;
+    console.log(`Generated referral link for user "${normalizedUsername}": ${referralLink}`);
 
     // Send referral link via bot
     await bot.sendMessage(user.telegramId, `🔗 Here is your referral link: ${referralLink}`);
+    console.log(`Referral link sent to user "${normalizedUsername}" (Telegram ID: ${user.telegramId})`);
 
     res.json({ success: true, referralLink });
 
   } catch (error) {
-    console.error('Error in /api/verify:', error);
+    console.error(`Error in /api/verify for user "${telegramUsername}":`, error);
     res.status(500).json({ success: false, message: '❌ Internal server error.' });
   }
 });
