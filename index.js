@@ -1,28 +1,26 @@
 // index.js
 
+require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const TelegramBot = require('node-telegram-bot-api');
-const cron = require('node-cron');
-const dotenv = require('dotenv');
 const cors = require('cors');
+const path = require('path');
+const User = require('./models/User');
 
-dotenv.config();
-
-// Suppress Mongoose strictQuery deprecation warning
-mongoose.set('strictQuery', false);
-
+// Initialize Express App
 const app = express();
 
 // Middleware
-app.use(express.json()); // Built-in body parser
+app.use(express.json());
 app.use(cors({
   origin: process.env.FRONTEND_URL,
   methods: ['GET', 'POST'],
   credentials: true,
 }));
+app.use(express.static(path.join(__dirname, 'public')));
 
-// Validate environment variables
+// Validate Environment Variables
 const requiredEnvVars = ['MONGO_URI', 'BOT_TOKEN', 'FRONTEND_URL', 'DOMAIN', 'CHANNEL_ID'];
 const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
 
@@ -42,153 +40,84 @@ mongoose.connect(process.env.MONGO_URI, {
   process.exit(1);
 });
 
-// Define User Schema
-const userSchema = new mongoose.Schema({
-  telegramId: { type: String, required: true, unique: true },
-  telegramUsername: { type: String, required: true, unique: true },
-  referralCode: { type: String, required: true, unique: true },
-  referrals: { type: Number, default: 0 },
-});
+// Initialize Telegram Bot with Webhook
+const bot = new TelegramBot(process.env.BOT_TOKEN, { webHook: true });
 
-const User = mongoose.model('User', userSchema);
-
-// Initialize Telegram Bot without polling
-const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: false });
-
-console.log('✅ Telegram bot initialized successfully.');
-
-// Set webhook URL
-const webhookUrl = `${process.env.DOMAIN}/telegram-webhook`;
-bot.setWebHook(webhookUrl)
+// Set Webhook
+const webhookURL = `${process.env.DOMAIN}/telegram-webhook`;
+bot.setWebHook(webhookURL)
   .then(() => {
-    console.log(`✅ Webhook set to ${webhookUrl}`);
+    console.log(`✅ Webhook set to ${webhookURL}`);
   })
   .catch(err => {
     console.error('❌ Failed to set webhook:', err);
   });
 
-// Express route to handle Telegram webhook
+// Handle Telegram Webhook
 app.post('/telegram-webhook', (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
 
-// Helper function to generate referral codes
-const generateReferralCode = () => {
-  return Math.random().toString(36).substr(2, 6).toUpperCase();
+// Helper Function to Generate Unique Referral Codes
+const generateReferralCode = async () => {
+  let code;
+  let exists = true;
+  while (exists) {
+    code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const user = await User.findOne({ referralCode: code });
+    if (!user) exists = false;
+  }
+  return code;
 };
 
-// User state management for handling conversations
-const userStates = {};
-
-// Handle /verify command
+// Handle '/verify' Command from Telegram
 bot.onText(/\/verify/, async (msg) => {
   const chatId = msg.chat.id;
-  const username = msg.from.username;
+  const telegramId = msg.from.id;
+  const telegramUsername = msg.from.username ? msg.from.username.toLowerCase() : null;
 
-  console.log(`📩 Received /verify command from Telegram ID: ${chatId}, Username: ${username}`);
+  console.log(`📩 Received /verify command from Telegram ID: ${telegramId}, Username: ${telegramUsername}`);
 
-  if (!username) {
+  if (!telegramUsername) {
     bot.sendMessage(chatId, '❌ Please set a username in Telegram to use this feature.');
-    console.log(`❌ Telegram ID: ${chatId} has no username set.`);
+    console.log(`❌ Telegram ID: ${telegramId} has no username set.`);
     return;
   }
 
   try {
-    // Check if user already exists
-    const existingUser = await User.findOne({ telegramUsername: username.toLowerCase() });
-    if (existingUser) {
-      bot.sendMessage(chatId, '✅ You have already been verified.');
-      console.log(`✅ Telegram ID: ${chatId} is already verified.`);
+    // Check if the user is a member of the channel
+    const chatMember = await bot.getChatMember(process.env.CHANNEL_ID, telegramId);
+    console.log(`🔍 Checking membership status for Telegram ID: ${telegramId}: ${chatMember.status}`);
+
+    if (['member', 'administrator', 'creator'].includes(chatMember.status)) {
+      // Check if the user is already registered
+      let user = await User.findOne({ telegramId });
+
+      if (user) {
+        bot.sendMessage(chatId, '✅ You have already been verified. You can proceed to the website.');
+        console.log(`✅ Telegram ID: ${telegramId} is already verified.`);
+      } else {
+        // Register the user
+        const referralCode = await generateReferralCode();
+
+        user = new User({ telegramId, telegramUsername, referralCode, referrals: 0 });
+        await user.save();
+
+        bot.sendMessage(chatId, '🎉 Verification successful! You can now proceed to the website.');
+        console.log(`✅ User "${telegramUsername}" saved to database with referral code "${referralCode}".`);
+      }
     } else {
-      // Prompt user for referral code
-      userStates[chatId] = 'awaitingReferralCode';
-      bot.sendMessage(chatId, '🔍 Please enter your referral code to verify (if any). If you do not have one, simply reply with "NONE".');
-      console.log(`🔍 Prompted Telegram ID: ${chatId} for referral code.`);
+      bot.sendMessage(chatId, '❌ Please join the Telegram channel first.');
+      console.log(`❌ Telegram ID: ${telegramId} is not a member of the channel.`);
     }
   } catch (error) {
-    console.error(`❌ Error checking user for Telegram ID: ${chatId}`, error);
+    console.error('❌ Verification Error:', error);
     bot.sendMessage(chatId, '❌ An error occurred during verification. Please try again later.');
   }
 });
 
-// Handle messages for referral code input
-bot.on('message', async (msg) => {
-  const chatId = msg.chat.id;
-
-  // Check if we are expecting a referral code from this user
-  if (userStates[chatId] === 'awaitingReferralCode') {
-    let referralCodeInput = msg.text.trim().toUpperCase();
-
-    console.log(`📥 Received referral code from Telegram ID: ${chatId}: ${referralCodeInput}`);
-
-    // Handle cases where user does not have a referral code
-    if (referralCodeInput === 'NONE') {
-      referralCodeInput = null;
-    }
-
-    const username = msg.from.username;
-
-    if (!username) {
-      bot.sendMessage(chatId, '❌ Please set a username in Telegram to use this feature.');
-      console.log(`❌ Telegram ID: ${chatId} has no username set.`);
-      delete userStates[chatId];
-      return;
-    }
-
-    try {
-      let referringUser = null;
-      if (referralCodeInput) {
-        referringUser = await User.findOne({ referralCode: referralCodeInput });
-        if (!referringUser) {
-          bot.sendMessage(chatId, '❌ Referral code not found. Please try /verify again.');
-          console.log(`❌ Referral code "${referralCodeInput}" not found for Telegram ID: ${chatId}`);
-          delete userStates[chatId];
-          return;
-        }
-      }
-
-      // Generate a unique referral code for the user
-      let newReferralCode;
-      let isUnique = false;
-      while (!isUnique) {
-        newReferralCode = generateReferralCode();
-        const existingCode = await User.findOne({ referralCode: newReferralCode });
-        if (!existingCode) isUnique = true;
-      }
-
-      // Save user to database
-      const user = new User({
-        telegramId: chatId.toString(),
-        telegramUsername: username.toLowerCase(),
-        referralCode: newReferralCode,
-      });
-
-      await user.save();
-      console.log(`✅ User "${username}" saved to database with referral code "${newReferralCode}".`);
-
-      // Increment referrals count for referring user
-      if (referringUser) {
-        referringUser.referrals += 1;
-        await referringUser.save();
-        bot.sendMessage(referringUser.telegramId, `🎁 Someone used your referral code! Thank you for spreading the word!`);
-        console.log(`✅ Referral count incremented for user "${referringUser.telegramUsername}".`);
-      }
-
-      bot.sendMessage(chatId, '🎉 Verification successful! You will start receiving daily updates from Double Penis.');
-      console.log(`🎉 Verification successful for Telegram ID: ${chatId}`);
-
-    } catch (error) {
-      console.error(`❌ Error saving user for Telegram ID: ${chatId}`, error);
-      bot.sendMessage(chatId, '❌ An error occurred during verification. Please try again later.');
-    }
-
-    // Clear user state
-    delete userStates[chatId];
-  }
-});
-
-// Express endpoint to handle verification from frontend
+// Express Endpoint to Handle Verification from Frontend
 app.post('/api/verify', async (req, res) => {
   const { telegramUsername } = req.body;
 
@@ -214,19 +143,18 @@ app.post('/api/verify', async (req, res) => {
     const referralLink = `${process.env.FRONTEND_URL}?referralCode=${user.referralCode}`;
     console.log(`🔗 Generated referral link for user "${normalizedUsername}": ${referralLink}`);
 
-    // Send referral link via bot
+    // Send referral link via Telegram Bot
     await bot.sendMessage(user.telegramId, `🔗 Here is your referral link: ${referralLink}`);
     console.log(`✅ Referral link sent to user "${normalizedUsername}" (Telegram ID: ${user.telegramId})`);
 
     res.json({ success: true, referralLink });
-
   } catch (error) {
     console.error(`❌ Error in /api/verify for user "${telegramUsername}":`, error);
     res.status(500).json({ success: false, message: '❌ Internal server error.' });
   }
 });
 
-// Express endpoint to handle chaos initiation and send "Gotcha" message
+// Express Endpoint to Handle Chaos Initiation from Frontend
 app.post('/api/startChaos', async (req, res) => {
   const { referralCode } = req.body;
 
@@ -250,44 +178,20 @@ app.post('/api/startChaos', async (req, res) => {
     console.log(`✅ "Gotcha" message sent to user "${user.telegramUsername}" (Telegram ID: ${user.telegramId}).`);
 
     res.json({ success: true, message: '✅ Chaos initiated successfully.' });
-
   } catch (error) {
     console.error('❌ Error in /api/startChaos:', error);
     res.status(500).json({ success: false, message: '❌ Internal server error.' });
   }
 });
 
-// Schedule daily messages at 9:00 AM server time
-cron.schedule('0 9 * * *', async () => {
-  console.log('📅 Running daily message scheduler...');
-  try {
-    const users = await User.find({});
-    for (const user of users) {
-      try {
-        await bot.sendMessage(user.telegramId, '📢 Good morning! Here is your daily update from Double Penis.');
-        console.log(`✅ Daily message sent to "${user.telegramUsername}" (Telegram ID: ${user.telegramId}).`);
-      } catch (error) {
-        console.error(`❌ Error sending daily message to "${user.telegramUsername}":`, error);
-      }
-    }
-    console.log('✅ Daily messages sent successfully.');
-  } catch (error) {
-    console.error('❌ Error fetching users for daily messages:', error);
-  }
+// Serve Frontend HTML (Optional)
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Start Express server
+// Start Express Server
 const PORT = process.env.PORT || 3000;
 
-const server = app.listen(PORT, () => {
+app.listen(PORT, () => {
   console.log(`🚀 Server is running on port ${PORT}`);
-});
-
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`❌ Port ${PORT} is already in use. Please stop other instances or use a different port.`);
-  } else {
-    console.error('❌ Server error:', err);
-  }
-  process.exit(1); // Exit the process to avoid unexpected behavior
 });
