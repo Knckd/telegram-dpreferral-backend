@@ -20,6 +20,15 @@ app.use(cors({
   credentials: true,
 }));
 
+// Validate environment variables
+const requiredEnvVars = ['PORT', 'MONGO_URI', 'BOT_TOKEN', 'FRONTEND_URL'];
+const missingEnvVars = requiredEnvVars.filter((envVar) => !process.env[envVar]);
+
+if (missingEnvVars.length > 0) {
+  console.error(`❌ Missing required environment variables: ${missingEnvVars.join(', ')}`);
+  process.exit(1);
+}
+
 // Connect to MongoDB
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
@@ -33,24 +42,34 @@ mongoose.connect(process.env.MONGO_URI, {
 
 // Define User Schema
 const userSchema = new mongoose.Schema({
-  telegramId: { type: String, required: true, unique: true }, // Telegram chat ID as string
-  telegramUsername: { type: String, required: true, unique: true }, // Telegram username in lowercase
-  referralCode: { type: String, required: true, unique: true }, // Unique referral code
-  referrals: { type: Number, default: 0 }, // Number of referrals
+  telegramId: { type: String, required: true, unique: true },
+  telegramUsername: { type: String, required: true, unique: true },
+  referralCode: { type: String, required: true, unique: true },
+  referrals: { type: Number, default: 0 },
 });
 
 const User = mongoose.model('User', userSchema);
 
 // Initialize Telegram Bot
-const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
+let bot;
+try {
+  bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
+  console.log('✅ Telegram bot initialized successfully.');
+} catch (error) {
+  console.error('❌ Failed to initialize Telegram bot:', error);
+  process.exit(1);
+}
 
 // Helper function to generate referral codes
 const generateReferralCode = () => {
-  return Math.random().toString(36).substr(2, 6).toUpperCase(); // Generate uppercase 6-character code
+  return Math.random().toString(36).substr(2, 6).toUpperCase();
 };
 
+// User state management for handling conversations
+const userStates = {};
+
 // Handle /verify command
-bot.onText(/\/verify/, (msg) => {
+bot.onText(/\/verify/, async (msg) => {
   const chatId = msg.chat.id;
   const username = msg.from.username;
 
@@ -59,29 +78,45 @@ bot.onText(/\/verify/, (msg) => {
     return;
   }
 
-  // Ask for referral code
-  bot.sendMessage(chatId, '🔍 Please enter your referral code to verify:');
+  try {
+    // Check if user already exists
+    const existingUser = await User.findOne({ telegramUsername: username.toLowerCase() });
+    if (existingUser) {
+      bot.sendMessage(chatId, '✅ You have already been verified.');
+    } else {
+      // Prompt user for referral code
+      userStates[chatId] = 'awaitingReferralCode';
+      bot.sendMessage(chatId, '🔍 Please enter your referral code to verify:');
+    }
+  } catch (error) {
+    console.error('Error checking user:', error);
+    bot.sendMessage(chatId, '❌ An error occurred during verification. Please try again later.');
+  }
+});
 
-  // Listen for the next message as referral code
-  bot.once('message', async (msg) => {
+// Handle messages for referral code input
+bot.on('message', async (msg) => {
+  const chatId = msg.chat.id;
+
+  // Check if we are expecting a referral code from this user
+  if (userStates[chatId] === 'awaitingReferralCode') {
     const referralCodeInput = msg.text.trim();
 
     if (!referralCodeInput) {
       bot.sendMessage(chatId, '❌ Referral code cannot be empty. Please try /verify again.');
+      delete userStates[chatId];
+      return;
+    }
+
+    const username = msg.from.username;
+
+    if (!username) {
+      bot.sendMessage(chatId, '❌ Please set a username in Telegram to use this feature.');
+      delete userStates[chatId];
       return;
     }
 
     try {
-      // Check if user already exists
-      const existingUser = await User.findOne({ telegramUsername: username.toLowerCase() });
-      if (existingUser) {
-        bot.sendMessage(chatId, '✅ You have already been verified.');
-        return;
-      }
-
-      // Optionally, verify if the referralCode exists in the system
-      // For simplicity, we'll assume any referral code is acceptable
-
       // Generate a unique referral code for the user
       let newReferralCode;
       let isUnique = false;
@@ -106,7 +141,10 @@ bot.onText(/\/verify/, (msg) => {
       console.error('Error saving user:', error);
       bot.sendMessage(chatId, '❌ An error occurred during verification. Please try again later.');
     }
-  });
+
+    // Clear user state
+    delete userStates[chatId];
+  }
 });
 
 // Express endpoint to handle verification from frontend
@@ -134,36 +172,6 @@ app.post('/api/verify', async (req, res) => {
 
   } catch (error) {
     console.error('Error in /api/verify:', error);
-    res.status(500).json({ success: false, message: '❌ Internal server error.' });
-  }
-});
-
-// Express endpoint to handle referrals (optional)
-app.post('/api/referral', async (req, res) => {
-  const { referralCode } = req.body;
-
-  if (!referralCode) {
-    return res.status(400).json({ success: false, message: '❌ Referral code is required.' });
-  }
-
-  try {
-    const referringUser = await User.findOne({ referralCode: referralCode.toUpperCase() });
-
-    if (!referringUser) {
-      return res.status(404).json({ success: false, message: '❌ Referral code not found.' });
-    }
-
-    // Increment referrals count
-    referringUser.referrals += 1;
-    await referringUser.save();
-
-    // Send a thank you message to the referring user
-    await bot.sendMessage(referringUser.telegramId, `🎁 Someone used your referral code! Thank you for spreading the word!`);
-
-    res.json({ success: true, message: '✅ Referral recorded successfully.' });
-
-  } catch (error) {
-    console.error('Error in /api/referral:', error);
     res.status(500).json({ success: false, message: '❌ Internal server error.' });
   }
 });
@@ -202,13 +210,13 @@ cron.schedule('0 9 * * *', async () => {
   console.log('📅 Running daily message scheduler...');
   try {
     const users = await User.find({});
-    users.forEach(async (user) => {
+    for (const user of users) {
       try {
         await bot.sendMessage(user.telegramId, '📢 Good morning! Here is your daily update from Double Penis.');
       } catch (error) {
         console.error(`Error sending daily message to ${user.telegramUsername}:`, error);
       }
-    });
+    }
     console.log('✅ Daily messages sent successfully.');
   } catch (error) {
     console.error('Error fetching users for daily messages:', error);
