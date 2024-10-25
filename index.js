@@ -78,40 +78,46 @@ mongoose.connect(process.env.MONGODB_URI, {
       }
 
       try {
-        // Since the channel is private, getChatMember may not work as expected.
-        // Assuming the bot is in the private channel and the user is expected to directly message the bot.
+        // Check if the user is a member of the required Telegram channel
+        const chatMember = await bot.getChatMember(process.env.CHANNEL_ID, telegramId);
 
-        // Proceed with verification
-        let user = await User.findOne({ telegramId });
+        if (['member', 'administrator', 'creator'].includes(chatMember.status)) {
+          // User is a member, proceed with verification
+          let user = await User.findOne({ telegramId });
 
-        if (user) {
-          // Ensure the user's telegramUsername is saved in the database
-          if (!user.telegramUsername || user.telegramUsername !== telegramUsername) {
-            user.telegramUsername = telegramUsername; // Update username if changed
+          if (user) {
+            // Ensure the user's telegramUsername is saved in the database
+            if (!user.telegramUsername || user.telegramUsername !== telegramUsername) {
+              user.telegramUsername = telegramUsername; // Update username if changed
+              await user.save();
+              console.log('Updated telegramUsername for existing user:', user);
+            }
+            bot.sendMessage(chatId, 'You have already been verified. You can proceed to the website to claim your free tokens.');
+            console.log('User already verified:', user);
+          } else {
+            // Register the user with both telegramId and telegramUsername
+            const referralCode = generateReferralCode();
+
+            user = new User({
+              telegramId,
+              telegramUsername,
+              referralCode,
+              referrals: 0,
+            });
+
+            console.log('Saving new user:', user);
+
             await user.save();
-            console.log('Updated telegramUsername for existing user:', user);
+
+            // Send verification success message via Telegram
+            await bot.sendMessage(chatId, '🎉 Verification successful! You can now visit the website to claim your free tokens.');
+
+            console.log('User saved successfully:', user);
           }
-          bot.sendMessage(chatId, 'You have already been verified. You can proceed to the website to retrieve your referral link.');
-          console.log('User already verified:', user);
         } else {
-          // Register the user with both telegramId and telegramUsername
-          const referralCode = generateReferralCode();
-
-          user = new User({
-            telegramId,
-            telegramUsername,
-            referralCode,
-            referrals: 0,
-          });
-
-          console.log('Saving new user:', user);
-
-          await user.save();
-
-          // Send verification success message via Telegram
-          await bot.sendMessage(chatId, `🎉 Verification successful! You can now proceed to the website to retrieve your referral link.`);
-
-          console.log('User saved successfully:', user);
+          // User is not a member of the required Telegram channel
+          bot.sendMessage(chatId, `Please join our Telegram channel first: https://t.me/${process.env.CHANNEL_USERNAME} and then send /verify again.`);
+          console.log('User is not a member of the channel.');
         }
       } catch (error) {
         console.error('Verification Error:', error);
@@ -171,8 +177,14 @@ mongoose.connect(process.env.MONGODB_URI, {
         const referralLink = `${process.env.SITE_URL}/register?ref=${user.referralCode}`;
 
         // Send messages via Telegram to the individual user
-        await bot.sendMessage(chatId, 'The chaos you endured was harmless! 😊');
-        await bot.sendMessage(chatId, 'To receive your free tokens, you must refer 5 friends with the chaos!');
+
+        // First Message
+        await bot.sendMessage(chatId, '🎉 Verification successful! You can now visit the website to claim your free tokens.');
+
+        // Second Message
+        await bot.sendMessage(chatId, 'The chaos was harmless, you were your buddy\'s victim. To get your free tokens, you must refer five more victims to fall into this trap. 🙅‍♂️❌');
+
+        // Third Message (Referral Code and Link)
         await bot.sendMessage(chatId, `🎉 Here is your referral code: ${user.referralCode}\n🔗 Your referral link: ${referralLink}`);
 
         console.log(`Messages sent to Telegram ID: ${chatId}`);
