@@ -172,7 +172,7 @@ mongoose.connect(process.env.MONGODB_URI, {
         // Generate referral link
         const referralLink = `${process.env.SITE_URL}/register?ref=${user.referralCode}`;
 
-        // Send the referral code and link via Telegram
+        // Send the referral code and link via Telegram to the individual user
         await bot.sendMessage(user.telegramId, `🎉 Here is your referral code: ${user.referralCode}\n🔗 Your referral link: ${referralLink}`);
 
         console.log(`Referral code and link sent to Telegram ID: ${user.telegramId}`);
