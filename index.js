@@ -109,8 +109,8 @@ mongoose.connect(process.env.MONGODB_URI, {
 
             await user.save();
 
-            // Send referral code via Telegram
-            await bot.sendMessage(chatId, `🎉 Verification successful! Here is your referral code: ${referralCode}`);
+            // Send verification success message via Telegram
+            await bot.sendMessage(chatId, `🎉 Verification successful! You can now proceed to the website to retrieve your referral link.`);
 
             console.log('User saved successfully:', user);
           }
@@ -150,12 +150,12 @@ mongoose.connect(process.env.MONGODB_URI, {
       }
     });
 
-    // Endpoint to send referral code via Telegram
+    // Endpoint to send referral code and link via Telegram
     app.post('/api/sendReferral', async (req, res) => {
-      const { telegramUsername, referralCode } = req.body;
+      const { telegramUsername } = req.body;
 
-      if (!telegramUsername || !referralCode) {
-        return res.status(400).json({ success: false, message: 'telegramUsername and referralCode are required.' });
+      if (!telegramUsername) {
+        return res.status(400).json({ success: false, message: 'telegramUsername is required.' });
       }
 
       try {
@@ -165,15 +165,18 @@ mongoose.connect(process.env.MONGODB_URI, {
           return res.status(404).json({ success: false, message: 'User not found. Please verify first.' });
         }
 
-        // Send the referral code via Telegram
-        await bot.sendMessage(user.telegramId, `🎉 Here is your referral code: ${referralCode}`);
+        // Generate referral link
+        const referralLink = `${process.env.SITE_URL}/register?ref=${user.referralCode}`;
 
-        console.log(`Referral code sent to Telegram ID: ${user.telegramId}`);
+        // Send the referral code and link via Telegram
+        await bot.sendMessage(user.telegramId, `🎉 Here is your referral code: ${user.referralCode}\n🔗 Your referral link: ${referralLink}`);
 
-        res.json({ success: true, message: 'Referral code sent via Telegram.' });
+        console.log(`Referral code and link sent to Telegram ID: ${user.telegramId}`);
+
+        res.json({ success: true, message: 'Referral code and link sent via Telegram.' });
       } catch (error) {
-        console.error('Error sending referral code:', error);
-        res.status(500).json({ success: false, message: 'Failed to send referral code via Telegram.' });
+        console.error('Error sending referral code and link:', error);
+        res.status(500).json({ success: false, message: 'Failed to send referral code and link via Telegram.' });
       }
     });
 
