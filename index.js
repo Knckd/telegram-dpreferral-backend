@@ -68,7 +68,7 @@ mongoose.connect(process.env.MONGODB_URI, {
     bot.onText(/\/verify/, async (msg) => {
       const chatId = msg.chat.id;
       const telegramId = msg.from.id;
-      const telegramUsername = msg.from.username ? msg.from.username.toLowerCase() : null;
+      let telegramUsername = msg.from.username ? msg.from.username.toLowerCase() : null;
 
       console.log(`Received /verify from Telegram ID: ${telegramId}, Username: ${telegramUsername}`);
 
@@ -128,6 +128,9 @@ mongoose.connect(process.env.MONGODB_URI, {
     // Endpoint to verify user on the website
     app.post('/api/verify', async (req, res) => {
       let { telegramUsername } = req.body;
+      if (!telegramUsername) {
+        return res.status(400).json({ success: false, message: 'telegramUsername is required.' });
+      }
       telegramUsername = telegramUsername.toLowerCase(); // Ensure case-insensitive matching
 
       console.log('Verification attempt for username:', telegramUsername);
@@ -162,6 +165,7 @@ mongoose.connect(process.env.MONGODB_URI, {
         const user = await User.findOne({ telegramUsername });
 
         if (!user) {
+          console.log(`User with username "${telegramUsername}" not found.`);
           return res.status(404).json({ success: false, message: 'User not found. Please verify first.' });
         }
 
