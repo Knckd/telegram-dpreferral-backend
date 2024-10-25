@@ -67,7 +67,7 @@ mongoose.connect(process.env.MONGODB_URI, {
     // Handle '/verify' command from users in Telegram
     bot.onText(/\/verify/, async (msg) => {
       const chatId = msg.chat.id;
-      const telegramId = msg.from.id;
+      const telegramId = msg.from.id.toString(); // Ensure it's a string
       let telegramUsername = msg.from.username ? msg.from.username.toLowerCase() : null;
 
       console.log(`Received /verify from Telegram ID: ${telegramId}, Username: ${telegramUsername}`);
@@ -180,6 +180,12 @@ mongoose.connect(process.env.MONGODB_URI, {
         res.json({ success: true, message: 'Referral code and link sent via Telegram.' });
       } catch (error) {
         console.error('Error sending referral code and link:', error);
+
+        // Check if the error is due to the user blocking the bot or other messaging issues
+        if (error.response && error.response.body && error.response.body.description) {
+          console.error(`Telegram API Error: ${error.response.body.description}`);
+        }
+
         res.status(500).json({ success: false, message: 'Failed to send referral code and link via Telegram.' });
       }
     });
