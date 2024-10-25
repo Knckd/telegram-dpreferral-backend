@@ -92,7 +92,7 @@ mongoose.connect(process.env.MONGODB_URI, {
               await user.save();
               console.log('Added telegramUsername to existing user:', user);
             }
-            bot.sendMessage(chatId, 'You have already been verified. You can proceed to the website to get your referral link.');
+            bot.sendMessage(chatId, 'You have already been verified. You can proceed to the website to retrieve your referral link.');
             console.log('User already verified:', user);
           } else {
             // Register the user with both telegramId and telegramUsername
