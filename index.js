@@ -8,6 +8,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const TelegramBot = require('node-telegram-bot-api');
 const cors = require('cors');
+const path = require('path');
 
 // Import the User model
 const User = require('./models/User');
@@ -17,7 +18,7 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: 'https://knckd.github.io', // Your GitHub Pages domain
+  origin: 'https://doublepenis.com', // Updated to your new domain
 }));
 app.use(express.json());
 
@@ -45,7 +46,7 @@ mongoose.connect(process.env.MONGODB_URI, {
     });
 
     // Set up webhook
-    const domain = process.env.DOMAIN; // Your backend URL on Render
+    const domain = process.env.DOMAIN; // Your backend URL (e.g., https://your-backend-domain.com)
     const webhookPath = `/bot${process.env.BOT_TOKEN}`;
     const webhookURL = `${domain}${webhookPath}`;
 
@@ -202,6 +203,10 @@ mongoose.connect(process.env.MONGODB_URI, {
       }
     });
 
-    // Other endpoints remain unchanged...
+    // Serve static files (if needed)
+    app.use(express.static(path.join(__dirname, 'public')));
+
+    // Other endpoints or middleware can go here
+
   })
   .catch((err) => console.error('MongoDB connection error:', err));
