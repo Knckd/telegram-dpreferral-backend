@@ -18,9 +18,12 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: 'https://doublepenis.com', // Updated to your new domain
+  origin: 'https://doublepenis.com', // Allow requests from your frontend domain
 }));
 app.use(express.json());
+
+// Serve static files from the 'public' directory
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Function to generate a unique referral code
 function generateReferralCode() {
@@ -46,7 +49,7 @@ mongoose.connect(process.env.MONGODB_URI, {
     });
 
     // Set up webhook
-    const domain = process.env.DOMAIN; // Your backend URL (e.g., https://your-backend-domain.com)
+    const domain = process.env.DOMAIN; // Your backend URL (e.g., https://telegram-dpreferral-backend.onrender.com)
     const webhookPath = `/bot${process.env.BOT_TOKEN}`;
     const webhookURL = `${domain}${webhookPath}`;
 
@@ -202,9 +205,6 @@ mongoose.connect(process.env.MONGODB_URI, {
         res.status(500).json({ success: false, message: 'Failed to send messages via Telegram.' });
       }
     });
-
-    // Serve static files (if needed)
-    app.use(express.static(path.join(__dirname, 'public')));
 
     // Other endpoints or middleware can go here
 
