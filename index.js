@@ -220,48 +220,5 @@ mongoose.connect(process.env.MONGODB_URI, {
       }
     });
 
-    // Endpoint to handle referral registration
-    app.post('/api/register', async (req, res) => {
-      const { telegramUsername, referralCode } = req.body;
-
-      if (!telegramUsername || !referralCode) {
-        return res.status(400).json({ success: false, message: 'telegramUsername and referralCode are required.' });
-      }
-
-      try {
-        // Find the referrer
-        const referrer = await User.findOne({ referralCode });
-
-        if (!referrer) {
-          return res.status(404).json({ success: false, message: 'Invalid referral code.' });
-        }
-
-        // Check if the user already exists
-        let user = await User.findOne({ telegramUsername: telegramUsername.toLowerCase() });
-
-        if (user) {
-          return res.json({ success: false, message: 'User already registered.' });
-        }
-
-        // Create the new user
-        user = new User({
-          telegramUsername: telegramUsername.toLowerCase(),
-          referralCode: generateReferralCode(),
-          referrals: 0,
-        });
-
-        await user.save();
-
-        // Increment referrer's referral count
-        referrer.referrals += 1;
-        await referrer.save();
-
-        res.json({ success: true, message: 'Registration successful.' });
-      } catch (error) {
-        console.error('Registration Error:', error);
-        res.status(500).json({ success: false, message: 'Error during registration.' });
-      }
-    });
-
   })
   .catch((err) => console.error('MongoDB connection error:', err));
