@@ -17,9 +17,11 @@ const User = require('./models/User');
 const app = express();
 
 // Middleware
-app.use(cors({
-  origin: 'https://doublepenis.com', // Allow requests from your frontend domain
-}));
+app.use(
+  cors({
+    origin: 'https://doublepenis.com', // Allow requests from your frontend domain
+  })
+);
 app.use(express.json());
 
 // Serve static files from the 'public' directory
@@ -33,12 +35,34 @@ function generateReferralCode() {
 // Initialize Telegram Bot with polling disabled (using webhooks)
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: false });
 
+// Set up webhook before connecting to MongoDB
+const domain = process.env.DOMAIN; // Your backend URL (e.g., https://telegram-dpreferral-backend.onrender.com)
+const webhookPath = `/bot${process.env.BOT_TOKEN}`;
+const webhookURL = `${domain}${webhookPath}`;
+
+// Set the webhook
+bot
+  .setWebHook(webhookURL)
+  .then(() => {
+    console.log('Webhook set successfully');
+  })
+  .catch((err) => {
+    console.error('Error setting webhook:', err);
+  });
+
+// Middleware to handle webhook requests
+app.post(webhookPath, (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
+
 // Connect to MongoDB and start the server after the connection is established
-mongoose.connect(process.env.MONGODB_URI, {
-  dbName: 'test', // Specify the database name
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
+mongoose
+  .connect(process.env.MONGODB_URI, {
+    dbName: 'test', // Specify the database name
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
   .then(() => {
     console.log('MongoDB connected');
 
@@ -46,26 +70,6 @@ mongoose.connect(process.env.MONGODB_URI, {
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
-    });
-
-    // Set up webhook
-    const domain = process.env.DOMAIN; // Your backend URL (e.g., https://telegram-dpreferral-backend.onrender.com)
-    const webhookPath = `/bot${process.env.BOT_TOKEN}`;
-    const webhookURL = `${domain}${webhookPath}`;
-
-    // Set the webhook
-    bot.setWebHook(webhookURL)
-      .then(() => {
-        console.log('Webhook set successfully');
-      })
-      .catch((err) => {
-        console.error('Error setting webhook:', err);
-      });
-
-    // Middleware to handle webhook requests
-    app.post(webhookPath, (req, res) => {
-      bot.processUpdate(req.body);
-      res.sendStatus(200);
     });
 
     // Handle '/verify' command from users in Telegram
@@ -77,7 +81,10 @@ mongoose.connect(process.env.MONGODB_URI, {
       console.log(`Received /verify from Telegram ID: ${telegramId}, Username: ${telegramUsername}`);
 
       if (!telegramUsername) {
-        bot.sendMessage(chatId, 'You need to set a Telegram username in your profile settings to use this verification system.');
+        bot.sendMessage(
+          chatId,
+          'You need to set a Telegram username in your profile settings to use this verification system.'
+        );
         return;
       }
 
@@ -85,18 +92,23 @@ mongoose.connect(process.env.MONGODB_URI, {
         // Check if the user is a member of the required Telegram channel
         const chatMember = await bot.getChatMember(process.env.CHANNEL_ID, telegramId);
 
+        console.log(`User's membership status: ${chatMember.status}`);
+
         if (['member', 'administrator', 'creator'].includes(chatMember.status)) {
           // User is a member, proceed with verification
           let user = await User.findOne({ telegramId });
 
           if (user) {
-            // Ensure the user's telegramUsername is saved in the database
-            if (!user.telegramUsername || user.telegramUsername !== telegramUsername) {
-              user.telegramUsername = telegramUsername; // Update username if changed
+            // Update username if changed
+            if (user.telegramUsername !== telegramUsername) {
+              user.telegramUsername = telegramUsername;
               await user.save();
               console.log('Updated telegramUsername for existing user:', user);
             }
-            bot.sendMessage(chatId, 'You have already been verified. You can proceed to the website to claim your free tokens.');
+            bot.sendMessage(
+              chatId,
+              'You have already been verified. You can proceed to the website to claim your free tokens.'
+            );
             console.log('User already verified:', user);
           } else {
             // Register the user with both telegramId and telegramUsername
@@ -114,18 +126,27 @@ mongoose.connect(process.env.MONGODB_URI, {
             await user.save();
 
             // Send verification success message via Telegram
-            await bot.sendMessage(chatId, '🎉 Verification successful! You can now visit the website to claim your free tokens.');
+            await bot.sendMessage(
+              chatId,
+              '🎉 Verification successful! You can now visit the website to claim your free tokens.'
+            );
 
             console.log('User saved successfully:', user);
           }
         } else {
           // User is not a member of the required Telegram channel
-          bot.sendMessage(chatId, `Please join our Telegram channel first: https://t.me/${process.env.CHANNEL_USERNAME} and then send /verify again.`);
+          bot.sendMessage(
+            chatId,
+            `Please join our Telegram channel first: https://t.me/${process.env.CHANNEL_USERNAME} and then send /verify again.`
+          );
           console.log('User is not a member of the channel.');
         }
       } catch (error) {
         console.error('Verification Error:', error);
-        bot.sendMessage(chatId, 'An error occurred during verification. Please try again later.');
+        bot.sendMessage(
+          chatId,
+          'An error occurred during verification. Please try again later.'
+        );
       }
     });
 
@@ -133,7 +154,9 @@ mongoose.connect(process.env.MONGODB_URI, {
     app.post('/api/verify', async (req, res) => {
       let { telegramUsername } = req.body;
       if (!telegramUsername) {
-        return res.status(400).json({ success: false, message: 'telegramUsername is required.' });
+        return res
+          .status(400)
+          .json({ success: false, message: 'telegramUsername is required.' });
       }
       telegramUsername = telegramUsername.toLowerCase(); // Ensure case-insensitive matching
 
@@ -153,7 +176,9 @@ mongoose.connect(process.env.MONGODB_URI, {
         }
       } catch (error) {
         console.error('Verification Error:', error);
-        res.status(500).json({ success: false, message: 'An error occurred during verification.' });
+        res
+          .status(500)
+          .json({ success: false, message: 'An error occurred during verification.' });
       }
     });
 
@@ -162,7 +187,9 @@ mongoose.connect(process.env.MONGODB_URI, {
       let { telegramUsername } = req.body;
 
       if (!telegramUsername) {
-        return res.status(400).json({ success: false, message: 'telegramUsername is required.' });
+        return res
+          .status(400)
+          .json({ success: false, message: 'telegramUsername is required.' });
       }
 
       telegramUsername = telegramUsername.toLowerCase(); // Ensure case-insensitive matching
@@ -172,7 +199,9 @@ mongoose.connect(process.env.MONGODB_URI, {
 
         if (!user) {
           console.log(`User with username "${telegramUsername}" not found.`);
-          return res.status(404).json({ success: false, message: 'User not found. Please verify first.' });
+          return res
+            .status(404)
+            .json({ success: false, message: 'User not found. Please verify first.' });
         }
 
         const chatId = user.telegramId;
@@ -183,13 +212,22 @@ mongoose.connect(process.env.MONGODB_URI, {
         // Send messages via Telegram to the individual user
 
         // First Message
-        await bot.sendMessage(chatId, '🎉 Verification successful! You can now visit the website to claim your free tokens.');
+        await bot.sendMessage(
+          chatId,
+          '🎉 Verification successful! You can now visit the website to claim your free tokens.'
+        );
 
         // Second Message
-        await bot.sendMessage(chatId, 'The chaos was harmless, you were your buddy\'s victim. To get your free tokens, you must refer five more victims to fall into this trap. 🙅‍♂️❌');
+        await bot.sendMessage(
+          chatId,
+          "The chaos was harmless, you were your buddy's victim. To get your free tokens, you must refer five more victims to fall into this trap. 🙅‍♂️❌"
+        );
 
         // Third Message (Referral Code and Link)
-        await bot.sendMessage(chatId, `🎉 Here is your referral code: ${user.referralCode}\n🔗 Your referral link: ${referralLink}`);
+        await bot.sendMessage(
+          chatId,
+          `🎉 Here is your referral code: ${user.referralCode}\n🔗 Your referral link: ${referralLink}`
+        );
 
         console.log(`Messages sent to Telegram ID: ${chatId}`);
 
@@ -202,7 +240,9 @@ mongoose.connect(process.env.MONGODB_URI, {
           console.error(`Telegram API Error: ${error.response.body.description}`);
         }
 
-        res.status(500).json({ success: false, message: 'Failed to send messages via Telegram.' });
+        res
+          .status(500)
+          .json({ success: false, message: 'Failed to send messages via Telegram.' });
       }
     });
 
@@ -219,6 +259,5 @@ mongoose.connect(process.env.MONGODB_URI, {
         res.status(500).json({ success: false, message: 'Error fetching leaderboard.' });
       }
     });
-
   })
   .catch((err) => console.error('MongoDB connection error:', err));
