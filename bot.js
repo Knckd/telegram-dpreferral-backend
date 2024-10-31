@@ -17,6 +17,21 @@ function generateReferralCode() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
+// Handle '/start' command
+bot.onText(/\/start/, (msg) => {
+  const chatId = msg.chat.id;
+  const welcomeMessage = `👋 **Welcome to the DoublePenis Verification Bot!**
+
+To claim your free tokens, please follow these steps:
+
+1. **Join our Telegram channel:** [Click here to join](https://t.me/${process.env.CHANNEL_USERNAME})
+2. **Verify your membership:** After joining, send the command /verify to confirm.
+
+Let's get started! 🚀`;
+
+  bot.sendMessage(chatId, welcomeMessage, { parse_mode: 'Markdown' });
+});
+
 // Handle '/verify' command
 bot.onText(/\/verify/, async (msg) => {
   const chatId = msg.chat.id;
@@ -28,14 +43,14 @@ bot.onText(/\/verify/, async (msg) => {
   if (!telegramUsername) {
     bot.sendMessage(
       chatId,
-      'You need to set a Telegram username in your profile settings to use this verification system.'
+      '❌ You need to set a Telegram username in your profile settings to use this verification system. Please set a username and try again.'
     );
     return;
   }
 
   try {
     // Check if the user is a member of the required Telegram channel
-    const chatMember = await bot.getChatMember(process.env.CHANNEL_ID, telegramId);
+    const chatMember = await bot.getChatMember(`@${process.env.CHANNEL_USERNAME}`, telegramId);
 
     console.log(`User's membership status: ${chatMember.status}`);
 
@@ -52,7 +67,7 @@ bot.onText(/\/verify/, async (msg) => {
         }
         bot.sendMessage(
           chatId,
-          'You have already been verified. You can proceed to the website to claim your free tokens.'
+          '✅ You have already been verified! You can now visit the website to claim your free tokens. 🎉'
         );
         console.log('User already verified:', user);
       } else {
@@ -73,7 +88,7 @@ bot.onText(/\/verify/, async (msg) => {
         // Send verification success message via Telegram
         await bot.sendMessage(
           chatId,
-          '🎉 Verification successful! You can now visit the website to claim your free tokens.'
+          '🎉 **Verification successful!** You can now visit the website to claim your free tokens.'
         );
 
         console.log('User saved successfully:', user);
@@ -82,7 +97,8 @@ bot.onText(/\/verify/, async (msg) => {
       // User is not a member of the required Telegram channel
       bot.sendMessage(
         chatId,
-        `Please join our Telegram channel first: https://t.me/${process.env.CHANNEL_USERNAME} and then send /verify again.`
+        `❌ You are not a member of our Telegram channel. Please join first: [Join Here](https://t.me/${process.env.CHANNEL_USERNAME}) and then send /verify again.`,
+        { parse_mode: 'Markdown' }
       );
       console.log('User is not a member of the channel.');
     }
@@ -90,7 +106,21 @@ bot.onText(/\/verify/, async (msg) => {
     console.error('Verification Error:', error);
     bot.sendMessage(
       chatId,
-      'An error occurred during verification. Please try again later.'
+      '⚠️ An error occurred during verification. Please try again later.'
+    );
+  }
+});
+
+// Optional: Handle other commands or messages
+bot.on('message', (msg) => {
+  const chatId = msg.chat.id;
+  const text = msg.text;
+
+  // If the message is not a recognized command, you can handle it here
+  if (!text.startsWith('/')) {
+    bot.sendMessage(
+      chatId,
+      `ℹ️ To verify, please use the /verify command after joining our Telegram channel.`
     );
   }
 });
