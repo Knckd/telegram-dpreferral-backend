@@ -1,3 +1,5 @@
+// index.js
+
 // Load environment variables
 require('dotenv').config();
 
@@ -35,8 +37,8 @@ const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: false });
 
 // Set up webhook before connecting to MongoDB
 const domain = process.env.DOMAIN; // Your backend URL (e.g., https://telegram-dpreferral-backend.onrender.com)
-const webhookPath = /bot${process.env.BOT_TOKEN};
-const webhookURL = ${domain}${webhookPath};
+const webhookPath = `/bot${process.env.BOT_TOKEN}`;
+const webhookURL = `${domain}${webhookPath}`;
 
 // Set the webhook
 bot
@@ -67,7 +69,7 @@ mongoose
     // Start the server after the database connection is established
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => {
-      console.log(Server running on port ${PORT});
+      console.log(`Server running on port ${PORT}`);
     });
 
     // Handle '/verify' command from users in Telegram
@@ -76,7 +78,7 @@ mongoose
       const telegramId = msg.from.id.toString(); // Ensure it's a string
       let telegramUsername = msg.from.username ? msg.from.username.toLowerCase() : null;
 
-      console.log(Received /verify from Telegram ID: ${telegramId}, Username: ${telegramUsername});
+      console.log(`Received /verify from Telegram ID: ${telegramId}, Username: ${telegramUsername}`);
 
       if (!telegramUsername) {
         bot.sendMessage(
@@ -90,7 +92,7 @@ mongoose
         // Check if the user is a member of the required Telegram channel
         const chatMember = await bot.getChatMember(process.env.CHANNEL_ID, telegramId);
 
-        console.log(User's membership status: ${chatMember.status});
+        console.log(`User's membership status: ${chatMember.status}`);
 
         if (['member', 'administrator', 'creator'].includes(chatMember.status)) {
           // User is a member, proceed with verification
@@ -135,7 +137,7 @@ mongoose
           // User is not a member of the required Telegram channel
           bot.sendMessage(
             chatId,
-            Please join our Telegram channel first: https://t.me/${process.env.CHANNEL_USERNAME} and then send /verify again.
+            `Please join our Telegram channel first: https://t.me/${process.env.CHANNEL_USERNAME} and then send /verify again.`
           );
           console.log('User is not a member of the channel.');
         }
@@ -196,7 +198,7 @@ mongoose
         const user = await User.findOne({ telegramUsername });
 
         if (!user) {
-          console.log(User with username "${telegramUsername}" not found.);
+          console.log(`User with username "${telegramUsername}" not found.`);
           return res
             .status(404)
             .json({ success: false, message: 'User not found. Please verify first.' });
@@ -205,7 +207,7 @@ mongoose
         const chatId = user.telegramId;
 
         // Generate referral link
-        const referralLink = ${process.env.SITE_URL}/register?ref=${user.referralCode};
+        const referralLink = `${process.env.SITE_URL}/register?ref=${user.referralCode}`;
 
         // Send messages via Telegram to the individual user
 
@@ -213,7 +215,7 @@ mongoose
         //await bot.sendMessage(
          // chatId,
          // '🎉 Verification successful! You can now visit the website to claim your free tokens.'
-        //);
+       // );
 
         // Second Message
         await bot.sendMessage(
@@ -224,10 +226,10 @@ mongoose
         // Third Message (Referral Code and Link)
         await bot.sendMessage(
           chatId,
-          🎉 Here is your referral code: ${user.referralCode}\n🔗 Your referral link: ${referralLink}
+          `🎉 Here is your referral code: ${user.referralCode}\n🔗 Your referral link: ${referralLink}`
         );
 
-        console.log(Messages sent to Telegram ID: ${chatId});
+        console.log(`Messages sent to Telegram ID: ${chatId}`);
 
         res.json({ success: true, message: 'Messages sent via Telegram.' });
       } catch (error) {
@@ -235,7 +237,7 @@ mongoose
 
         // Check if the error is due to the user blocking the bot or other messaging issues
         if (error.response && error.response.body && error.response.body.description) {
-          console.error(Telegram API Error: ${error.response.body.description});
+          console.error(`Telegram API Error: ${error.response.body.description}`);
         }
 
         res
