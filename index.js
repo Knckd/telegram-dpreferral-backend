@@ -212,10 +212,10 @@ mongoose
         // Send messages via Telegram to the individual user
 
         // First Message
-        await bot.sendMessage(
-          chatId,
-          '🎉 Verification successful! You can now visit the website to claim your free tokens.'
-        );
+        //await bot.sendMessage(
+         // chatId,
+         // '🎉 Verification successful! You can now visit the website to claim your free tokens.'
+        //);
 
         // Second Message
         await bot.sendMessage(
