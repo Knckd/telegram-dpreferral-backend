@@ -1,3 +1,5 @@
+// bot.js
+
 require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const mongoose = require('mongoose');
@@ -26,7 +28,7 @@ function generateReferralCode() {
 // Handle '/start' command
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
-  const welcomeMessage = `👋 **Welcome to the DoublePenis Verification Bot!**
+  const welcomeMessage = `👋 *Welcome to the DoublePenis Verification Bot!*
 
 To claim your free tokens, please follow these steps:
 
@@ -36,7 +38,7 @@ To claim your free tokens, please follow these steps:
 Let's get started! 🚀`;
 
   console.log(`📥 /start command received from Telegram ID: ${msg.from.id}, Username: ${msg.from.username}`);
-  
+
   bot.sendMessage(chatId, welcomeMessage, { parse_mode: 'Markdown' })
     .then(() => {
       console.log(`✅ Sent welcome message to Telegram ID: ${msg.from.id}`);
@@ -60,7 +62,7 @@ bot.onText(/\/verify/, async (msg) => {
       '❌ You need to set a Telegram username in your profile settings to use this verification system. Please set a username and try again.'
     )
     .then(() => {
-      console.log(`⚠️ Sent username prompt to Telegram ID: ${telegramId}`);
+      console.log(`⚠️ Prompted Telegram ID: ${telegramId} to set a username.`);
     })
     .catch((err) => {
       console.error(`❌ Error sending username prompt to Telegram ID: ${telegramId}:`, err);
@@ -79,12 +81,7 @@ bot.onText(/\/verify/, async (msg) => {
       let user = await User.findOne({ telegramId });
 
       if (user) {
-        // Update username if changed
-        if (user.telegramUsername !== telegramUsername) {
-          user.telegramUsername = telegramUsername;
-          await user.save();
-          console.log('📝 Updated telegramUsername for existing user:', user);
-        }
+        // User already exists
         bot.sendMessage(
           chatId,
           '✅ You have already been verified! You can now visit the website to claim your free tokens. 🎉'
@@ -93,11 +90,10 @@ bot.onText(/\/verify/, async (msg) => {
           console.log(`✅ Sent already verified message to Telegram ID: ${telegramId}`);
         })
         .catch((err) => {
-          console.error(`❌ Error sending verification confirmation to Telegram ID: ${telegramId}:`, err);
+          console.error(`❌ Error sending already verified message to Telegram ID: ${telegramId}:`, err);
         });
-        console.log('ℹ️ User already verified:', user);
       } else {
-        // Register the user with both telegramId and telegramUsername
+        // Register the new user
         const referralCode = generateReferralCode();
 
         user = new User({
@@ -107,14 +103,13 @@ bot.onText(/\/verify/, async (msg) => {
           referrals: 0,
         });
 
-        console.log('💾 Saving new user:', user);
-
         await user.save();
 
         // Send verification success message via Telegram
-        await bot.sendMessage(
+        bot.sendMessage(
           chatId,
-          '🎉 **Verification successful!** You can now visit the website to claim your free tokens.'
+          '🎉 *Verification successful!* You can now visit the website to claim your free tokens.',
+          { parse_mode: 'Markdown' }
         )
         .then(() => {
           console.log(`✅ Sent verification success message to Telegram ID: ${telegramId}`);
@@ -133,7 +128,7 @@ bot.onText(/\/verify/, async (msg) => {
         { parse_mode: 'Markdown' }
       )
       .then(() => {
-        console.log(`⚠️ Sent not a member message to Telegram ID: ${telegramId}`);
+        console.log(`⚠️ Instructed Telegram ID: ${telegramId} to join the channel.`);
       })
       .catch((err) => {
         console.error(`❌ Error sending not a member message to Telegram ID: ${telegramId}:`, err);
@@ -161,17 +156,30 @@ bot.on('message', (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
 
-  // If the message is not a recognized command, you can handle it here
+  // If the message is not a recognized command, provide guidance
   if (!text.startsWith('/')) {
     bot.sendMessage(
       chatId,
       `ℹ️ To verify, please use the /verify command after joining our Telegram channel.`
     )
     .then(() => {
-      console.log(`ℹ️ Sent verification instruction to Telegram ID: ${chatId}`);
+      console.log(`ℹ️ Provided verification guidance to Telegram ID: ${chatId}`);
     })
     .catch((err) => {
-      console.error(`❌ Error sending verification instruction to Telegram ID: ${chatId}:`, err);
+      console.error(`❌ Error sending verification guidance to Telegram ID: ${chatId}:`, err);
     });
   }
 });
+
+// Handle polling errors
+bot.on('polling_error', (error) => {
+  console.error(`🔴 Polling Error: ${error.code} - ${error.message}`);
+});
+
+// Handle webhook errors (if using webhooks)
+bot.on('webhook_error', (error) => {
+  console.error(`🔴 Webhook Error: ${error.code} - ${error.message}`);
+});
+
+// Confirmation of bot startup
+console.log('🤖 Bot is up and running!');
