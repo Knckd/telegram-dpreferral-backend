@@ -28,9 +28,17 @@ app.use(express.json());
 // Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Function to generate a unique referral code
-function generateReferralCode() {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
+// Function to generate a unique referral code starting from '511'
+async function generateReferralCode() {
+  const lastUser = await User.findOne({}).sort({ referralCode: -1 }).exec();
+  let newReferralCode = '511';
+  if (lastUser && lastUser.referralCode) {
+    const lastCode = parseInt(lastUser.referralCode, 10);
+    if (!isNaN(lastCode)) {
+      newReferralCode = (lastCode + 1).toString();
+    }
+  }
+  return newReferralCode;
 }
 
 // Initialize Telegram Bot with polling disabled (using webhooks)
@@ -77,13 +85,16 @@ mongoose
     bot.onText(/\/start/, (msg) => {
       const chatId = msg.chat.id;
 
-      console.log(`📥 /start command received from Telegram ID: ${msg.from.id}, Username: ${msg.from.username}`);
+      console.log(
+        `📥 /start command received from Telegram ID: ${msg.from.id}, Username: ${msg.from.username}`
+      );
 
       const welcomeMessage = `👋 Welcome to the Double Penis Verification Bot
 
 /verify to begin`;
 
-      bot.sendMessage(chatId, welcomeMessage)
+      bot
+        .sendMessage(chatId, welcomeMessage)
         .then(() => {
           console.log(`✅ Sent welcome message to Telegram ID: ${msg.from.id}`);
         })
@@ -98,19 +109,25 @@ mongoose
       const telegramId = msg.from.id.toString(); // Ensure it's a string
       let telegramUsername = msg.from.username ? msg.from.username.toLowerCase() : null;
 
-      console.log(`📥 /verify command received from Telegram ID: ${telegramId}, Username: ${telegramUsername}`);
+      console.log(
+        `📥 /verify command received from Telegram ID: ${telegramId}, Username: ${telegramUsername}`
+      );
 
       if (!telegramUsername) {
-        bot.sendMessage(
-          chatId,
-          '❌ You need to set a Telegram username in your profile settings to use this verification system. Please set a username and try again.'
-        )
-        .then(() => {
-          console.log(`⚠️ Prompted Telegram ID: ${telegramId} to set a username.`);
-        })
-        .catch((err) => {
-          console.error(`❌ Error sending username prompt to Telegram ID: ${telegramId}:`, err);
-        });
+        bot
+          .sendMessage(
+            chatId,
+            '❌ You need to set a Telegram username in your profile settings to use this verification system. Please set a username and try again.'
+          )
+          .then(() => {
+            console.log(`⚠️ Prompted Telegram ID: ${telegramId} to set a username.`);
+          })
+          .catch((err) => {
+            console.error(
+              `❌ Error sending username prompt to Telegram ID: ${telegramId}:`,
+              err
+            );
+          });
         return;
       }
 
@@ -131,19 +148,23 @@ mongoose
               await user.save();
               console.log('📝 Updated telegramUsername for existing user:', user);
             }
-            bot.sendMessage(
-              chatId,
-              '✅ You have already been verified! You can now visit the website to claim your free tokens. 🎉'
-            )
-            .then(() => {
-              console.log(`✅ Sent already verified message to Telegram ID: ${telegramId}`);
-            })
-            .catch((err) => {
-              console.error(`❌ Error sending already verified message to Telegram ID: ${telegramId}:`, err);
-            });
+            bot
+              .sendMessage(
+                chatId,
+                '✅ You have already been verified! You can now visit the website to claim your free tokens. 🎉'
+              )
+              .then(() => {
+                console.log(`✅ Sent already verified message to Telegram ID: ${telegramId}`);
+              })
+              .catch((err) => {
+                console.error(
+                  `❌ Error sending already verified message to Telegram ID: ${telegramId}:`,
+                  err
+                );
+              });
           } else {
             // Register the user with both telegramId and telegramUsername
-            const referralCode = generateReferralCode();
+            const referralCode = await generateReferralCode();
 
             user = new User({
               telegramId,
@@ -155,47 +176,56 @@ mongoose
             await user.save();
 
             // Send verification success message via Telegram
-            bot.sendMessage(
-              chatId,
-              '🎉 Verification successful! You can now visit the website to claim your free tokens.'
-            )
-            .then(() => {
-              console.log(`✅ Sent verification success message to Telegram ID: ${telegramId}`);
-            })
-            .catch((err) => {
-              console.error(`❌ Error sending verification success message to Telegram ID: ${telegramId}:`, err);
-            });
+            bot
+              .sendMessage(
+                chatId,
+                '🎉 Verification successful! You can now visit the website to claim your free tokens.'
+              )
+              .then(() => {
+                console.log(`✅ Sent verification success message to Telegram ID: ${telegramId}`);
+              })
+              .catch((err) => {
+                console.error(
+                  `❌ Error sending verification success message to Telegram ID: ${telegramId}:`,
+                  err
+                );
+              });
 
             console.log('🆕 New user saved successfully:', user);
           }
         } else {
           // User is not a member of the required Telegram channel
-          bot.sendMessage(
-            chatId,
-            `❌ You are not a member of our Telegram channel. Please join first: [Join Here](https://t.me/${process.env.CHANNEL_USERNAME}) and then send /verify again.`,
-            { parse_mode: 'Markdown' }
-          )
-          .then(() => {
-            console.log(`⚠️ Instructed Telegram ID: ${telegramId} to join the channel.`);
-          })
-          .catch((err) => {
-            console.error(`❌ Error sending not a member message to Telegram ID: ${telegramId}:`, err);
-          });
+          bot
+            .sendMessage(
+              chatId,
+              `❌ You are not a member of our Telegram channel. Please join first: [Join Here](https://t.me/${process.env.CHANNEL_USERNAME}) and then send /verify again.`,
+              { parse_mode: 'Markdown' }
+            )
+            .then(() => {
+              console.log(`⚠️ Instructed Telegram ID: ${telegramId} to join the channel.`);
+            })
+            .catch((err) => {
+              console.error(
+                `❌ Error sending not a member message to Telegram ID: ${telegramId}:`,
+                err
+              );
+            });
 
           console.log('⚠️ User is not a member of the channel.');
         }
       } catch (error) {
         console.error('🔴 Verification Error:', error);
-        bot.sendMessage(
-          chatId,
-          '⚠️ An error occurred during verification. Please try again later.'
-        )
-        .then(() => {
-          console.log(`⚠️ Sent error message to Telegram ID: ${telegramId}`);
-        })
-        .catch((err) => {
-          console.error(`❌ Error sending error message to Telegram ID: ${telegramId}:`, err);
-        });
+        bot
+          .sendMessage(chatId, '⚠️ An error occurred during verification. Please try again later.')
+          .then(() => {
+            console.log(`⚠️ Sent error message to Telegram ID: ${telegramId}`);
+          })
+          .catch((err) => {
+            console.error(
+              `❌ Error sending error message to Telegram ID: ${telegramId}:`,
+              err
+            );
+          });
       }
     });
 
@@ -221,7 +251,10 @@ mongoose
         } else {
           console.log('User not found in the database.');
           // User not found
-          return res.json({ success: false, message: 'Please send /verify to the bot first.' });
+          return res.json({
+            success: false,
+            message: 'Please send /verify to the bot first.',
+          });
         }
       } catch (error) {
         console.error('Verification Error:', error);
@@ -261,7 +294,8 @@ mongoose
         // Send the condensed chaos message
         const chaosMessage = `𝗖𝗵𝗮𝗼𝘀 𝗪𝗮𝘀 𝗝𝘂𝘀𝘁 𝘁𝗵𝗲 𝗕𝗲𝗴𝗶𝗻𝗻𝗶𝗻𝗴!\n\nRefer Friends, Earn REAL Tokens, and Unlock Rewards!\n\nReferral link: ${referralLink}`;
 
-        await bot.sendMessage(chatId, chaosMessage)
+        await bot
+          .sendMessage(chatId, chaosMessage)
           .then(() => {
             console.log(`✅ Sent chaos message to Telegram ID: ${chatId}`);
           })
@@ -332,6 +366,5 @@ mongoose
       console.log('⏰ Sending daily messages to users...');
       sendDailyMessages();
     });
-
   })
   .catch((err) => console.error('❌ MongoDB connection error:', err));
