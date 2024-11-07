@@ -82,11 +82,14 @@ mongoose
     });
 
     // Handle '/start' command from users in Telegram
-    bot.onText(/\/start/, (msg) => {
+    bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
       const chatId = msg.chat.id;
+      const telegramId = msg.from.id.toString();
+      let telegramUsername = msg.from.username ? msg.from.username.toLowerCase() : null;
+      const referralCodeUsed = match[1];
 
       console.log(
-        `📥 /start command received from Telegram ID: ${msg.from.id}, Username: ${msg.from.username}`
+        `📥 /start command received from Telegram ID: ${telegramId}, Username: ${telegramUsername}, Referral Code Used: ${referralCodeUsed}`
       );
 
       const welcomeMessage = `👋 Welcome to the Double Penis Verification Bot
@@ -96,11 +99,41 @@ mongoose
       bot
         .sendMessage(chatId, welcomeMessage)
         .then(() => {
-          console.log(`✅ Sent welcome message to Telegram ID: ${msg.from.id}`);
+          console.log(`✅ Sent welcome message to Telegram ID: ${telegramId}`);
         })
         .catch((err) => {
-          console.error(`❌ Error sending welcome message to Telegram ID: ${msg.from.id}:`, err);
+          console.error(`❌ Error sending welcome message to Telegram ID: ${telegramId}:`, err);
         });
+
+      // Process referral if a referral code is provided
+      if (referralCodeUsed) {
+        const referrer = await User.findOne({ referralCode: referralCodeUsed.trim() });
+        if (referrer) {
+          // Check if the new user already exists
+          let user = await User.findOne({ telegramId });
+          if (!user) {
+            // Create a new user without a referral code yet
+            user = new User({
+              telegramId,
+              telegramUsername,
+              referrals: 0,
+            });
+            await user.save();
+            console.log(`🆕 New user registered via referral: ${telegramId}`);
+          }
+
+          // Avoid self-referral and duplicate referral
+          if (referrer.telegramId !== telegramId && !user.referredBy) {
+            user.referredBy = referrer.telegramId;
+            await user.save();
+
+            referrer.referrals += 1;
+            await referrer.save();
+
+            console.log(`🔗 Referral recorded: ${referrer.telegramId} referred ${telegramId}`);
+          }
+        }
+      }
     });
 
     // Handle '/verify' command from users in Telegram
@@ -334,9 +367,25 @@ mongoose
 
     // Daily messages content
     const dailyMessages = [
-      "Don't forget to share your referral link to earn more tokens!",
-      "Keep the momentum going! Refer friends and unlock rewards.",
-      // Add more messages as needed
+      "*Daily Message:* Why settle for smooth browsing? Let’s cause some chaos!",
+      "*Daily Message:* Keep it rolling! Let’s make some tech explode!",
+      "*Daily Message:* Time to break the internet—literally! Are you in?",
+      "*Daily Message:* Don’t let your computer feel left out—give it a reason to crash!",
+      "*Daily Message:* Let’s crash some systems today!",
+      "*Daily Message:* Why settle for smooth browsing? Let’s cause some chaos!",
+      "*Daily Message:* Ready to unleash some meme madness? Let’s get wild!",
+      "*Daily Message:* Your computer is itching for a little chaos—let’s deliver!",
+      "*Daily Message:* Get ready to meme hard and crash harder!",
+      "*Daily Message:* Let’s turn the internet upside down.",
+      "*Daily Message:* Why browse normally when you can meme wildly?",
+      "*Daily Message:* Your computer deserves a thrill—let’s give it a ride!",
+      "*Daily Message:* It’s time to turn some gigabytes into gigglebytes!",
+      "*Daily Message:* Buckle up! We’re about to meme our way to chaos!",
+      "*Daily Message:* Let’s make today a tech-tastrophe—are you in?",
+      "*Daily Message:* Why play nice? Let’s unleash some digital havoc!",
+      "*Daily Message:* Ready for a meme revolution? Let’s make some noise!",
+      "*Daily Message:* Let’s fill the internet with laughter and a little chaos!",
+      "*Daily Message:* Why follow the rules when you can crash the game?",
     ];
 
     // Function to send daily messages
@@ -352,7 +401,7 @@ mongoose
           const message = dailyMessages[Math.floor(Math.random() * dailyMessages.length)];
 
           try {
-            await bot.sendMessage(chatId, message);
+            await bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
             console.log(`✅ Sent daily message to Telegram ID: ${chatId}`);
           } catch (err) {
             console.error(`❌ Error sending daily message to Telegram ID: ${chatId}:`, err);
