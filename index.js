@@ -92,7 +92,7 @@ mongoose
         `📥 /start command received from Telegram ID: ${telegramId}, Username: ${telegramUsername}, Referral Code Used: ${referralCodeUsed}`
       );
 
-      const welcomeMessage = `👋 Welcome to the Double Penis Verification Bot
+      const welcomeMessage = `👋 Welcome to the Double Penis Verification Bot!
 
 /verify to begin`;
 
@@ -117,66 +117,41 @@ mongoose
               telegramId,
               telegramUsername,
               referrals: 0,
-              referredBy: referrer.telegramId,
             });
             await user.save();
             console.log(`🆕 New user registered via referral: ${telegramId}`);
+          }
 
-            // Avoid self-referral and duplicate referral
-            if (referrer.telegramId !== telegramId) {
-              referrer.referrals += 1;
-              await referrer.save();
+          // Avoid self-referral and duplicate referral
+          if (referrer.telegramId !== telegramId && !user.referredBy) {
+            user.referredBy = referrer.telegramId;
+            await user.save();
 
-              console.log(`🔗 Referral recorded: ${referrer.telegramId} referred ${telegramId}`);
+            referrer.referrals += 1;
+            await referrer.save();
 
-              // Notify the referrer
-              try {
-                // First message
-                await bot.sendMessage(
-                  referrer.telegramId,
-                  'Congratulations! Someone has used your referral link. 🎉'
-                );
+            console.log(`🔗 Referral recorded: ${referrer.telegramId} referred ${telegramId}`);
 
-                // Second message with details
-                await bot.sendMessage(
-                  referrer.telegramId,
-                  `@${telegramUsername} has joined using your referral link.\nTotal Referrals: ${referrer.referrals}`
-                );
+            // Notify the referrer via Telegram messages
+            try {
+              // First message
+              await bot.sendMessage(
+                referrer.telegramId,
+                'Congratulations! Someone has used your referral link. 🎉'
+              );
 
-                console.log(`✅ Notified referrer ${referrer.telegramId} about the new referral.`);
-              } catch (err) {
-                console.error(`❌ Error notifying referrer ${referrer.telegramId}:`, err);
-              }
-            }
-          } else {
-            // User already exists, update their referredBy if not set
-            if (!user.referredBy && referrer.telegramId !== telegramId) {
-              user.referredBy = referrer.telegramId;
-              await user.save();
+              // Second message with total referrals and username of who signed up
+              const totalReferrals = referrer.referrals;
+              const newUserUsername = telegramUsername ? `@${telegramUsername}` : 'a new user';
 
-              referrer.referrals += 1;
-              await referrer.save();
+              await bot.sendMessage(
+                referrer.telegramId,
+                `You now have a total of ${totalReferrals} referrals!\nNew referral: ${newUserUsername}`
+              );
 
-              console.log(`🔗 Referral updated: ${referrer.telegramId} referred ${telegramId}`);
-
-              // Notify the referrer
-              try {
-                // First message
-                await bot.sendMessage(
-                  referrer.telegramId,
-                  'Congratulations! Someone has used your referral link. 🎉'
-                );
-
-                // Second message with details
-                await bot.sendMessage(
-                  referrer.telegramId,
-                  `@${telegramUsername} has joined using your referral link.\nTotal Referrals: ${referrer.referrals}`
-                );
-
-                console.log(`✅ Notified referrer ${referrer.telegramId} about the new referral.`);
-              } catch (err) {
-                console.error(`❌ Error notifying referrer ${referrer.telegramId}:`, err);
-              }
+              console.log(`✅ Notified referrer (${referrer.telegramId}) of new referral.`);
+            } catch (err) {
+              console.error(`❌ Error notifying referrer (${referrer.telegramId}):`, err);
             }
           }
         }
@@ -372,7 +347,7 @@ mongoose
         const referralLink = `https://t.me/${process.env.BOT_USERNAME}?start=${user.referralCode}`;
 
         // Send the condensed chaos message
-        const chaosMessage = `𝗖𝗵𝗮𝗼𝘀 𝗪𝗮𝘀 𝗝𝘂𝘀𝘁 𝘁𝗵𝗲 𝗕𝗲𝗴𝗶𝗻𝗻𝗶𝗻𝗴!\n\nRefer Friends, Earn REAL Tokens, and Unlock Rewards!\n\nYour referral link: ${referralLink}`;
+        const chaosMessage = `𝗖𝗵𝗮𝗼𝘀 𝗪𝗮𝘀 𝗝𝘂𝘀𝘁 𝘁𝗵𝗲 𝗕𝗲𝗴𝗶𝗻𝗻𝗶𝗻𝗴!\n\nRefer Friends, Earn REAL Tokens, and Unlock Rewards!\n\nReferral link: ${referralLink}`;
 
         await bot
           .sendMessage(chatId, chaosMessage)
