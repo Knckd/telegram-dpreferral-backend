@@ -376,33 +376,28 @@ mongoose
 
         const chatId = user.telegramId;
 
-        // Generate referral link
-        const referralLink = `https://t.me/${process.env.BOT_USERNAME}?start=${user.referralCode}`;
+        // Generate website referral link
+        const referralLink = `https://doublepenis.com?ref=${user.referralCode}`;
 
-        // Send the condensed chaos message
-        const chaosMessage = `𝗖𝗵𝗮𝗼𝘀 𝗪𝗮𝘀 𝗝𝘂𝘀𝘁 𝘁𝗵𝗲 𝗕𝗲𝗴𝗶𝗻𝗻𝗶𝗻𝗴!\n\nRefer Friends, Earn REAL Tokens, and Unlock Rewards!\n\nReferral link: ${referralLink}`;
+        // Send the message with the website referral link
+        const message = `Refer friends and earn rewards!\n\nYour referral link: ${referralLink}`;
 
         await bot
-          .sendMessage(chatId, chaosMessage)
+          .sendMessage(chatId, message)
           .then(() => {
-            console.log(`✅ Sent chaos message to Telegram ID: ${chatId}`);
+            console.log(`✅ Sent referral link to Telegram ID: ${chatId}`);
           })
           .catch((err) => {
-            console.error(`❌ Error sending chaos message to Telegram ID: ${chatId}:`, err);
+            console.error(`❌ Error sending referral link to Telegram ID: ${chatId}:`, err);
           });
 
-        res.json({ success: true, message: 'Chaos message sent via Telegram.' });
+        res.json({ success: true, message: 'Referral link sent via Telegram.' });
       } catch (error) {
-        console.error('❌ Error sending chaos message:', error);
-
-        // Check if the error is due to the user blocking the bot or other messaging issues
-        if (error.response && error.response.body && error.response.body.description) {
-          console.error(`Telegram API Error: ${error.response.body.description}`);
-        }
+        console.error('❌ Error sending referral link:', error);
 
         res
           .status(500)
-          .json({ success: false, message: 'Failed to send chaos message via Telegram.' });
+          .json({ success: false, message: 'Failed to send referral link via Telegram.' });
       }
     });
 
