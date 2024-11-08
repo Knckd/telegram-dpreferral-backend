@@ -92,6 +92,91 @@ mongoose
         `📥 /start command received from Telegram ID: ${telegramId}, Username: ${telegramUsername}, Referral Code Used: ${referralCodeUsed}`
       );
 
+      if (!telegramUsername) {
+        bot
+          .sendMessage(
+            chatId,
+            '❌ You need to set a Telegram username in your profile settings to use this bot. Please set a username and try again.'
+          )
+          .then(() => {
+            console.log(`⚠️ Prompted Telegram ID: ${telegramId} to set a username.`);
+          })
+          .catch((err) => {
+            console.error(
+              `❌ Error sending username prompt to Telegram ID: ${telegramId}:`,
+              err
+            );
+          });
+        return;
+      }
+
+      // Check if the user already exists
+      let user = await User.findOne({ telegramId });
+      let isNewUser = false;
+
+      if (!user) {
+        isNewUser = true;
+
+        // Generate a new referral code for the new user
+        const referralCode = await generateReferralCode();
+
+        // Create a new user
+        user = new User({
+          telegramId,
+          telegramUsername,
+          referralCode,
+          referrals: 0,
+        });
+
+        // If a referral code was used, find the referrer
+        if (referralCodeUsed) {
+          const referrer = await User.findOne({ referralCode: referralCodeUsed.trim() });
+          if (referrer) {
+            // Avoid self-referral and duplicate referral
+            if (referrer.telegramId !== telegramId && !user.referredBy) {
+              user.referredBy = referrer.telegramId;
+
+              referrer.referrals += 1;
+              await referrer.save();
+
+              console.log(`🔗 Referral recorded: ${referrer.telegramId} referred ${telegramId}`);
+
+              // Notify the referrer via Telegram messages
+              try {
+                // First message
+                await bot.sendMessage(
+                  referrer.telegramId,
+                  'Congratulations! Someone has used your referral link. 🎉'
+                );
+
+                // Second message with total referrals and username of who signed up
+                const totalReferrals = referrer.referrals;
+                const newUserUsername = telegramUsername ? `@${telegramUsername}` : 'a new user';
+
+                await bot.sendMessage(
+                  referrer.telegramId,
+                  `You now have a total of ${totalReferrals} referrals!\nNew referral: ${newUserUsername}`
+                );
+
+                console.log(`✅ Notified referrer (${referrer.telegramId}) of new referral.`);
+              } catch (err) {
+                console.error(`❌ Error notifying referrer (${referrer.telegramId}):`, err);
+              }
+            }
+          }
+        }
+
+        await user.save();
+        console.log(`🆕 New user registered: ${telegramId}`);
+      } else {
+        // Update username if changed
+        if (user.telegramUsername !== telegramUsername) {
+          user.telegramUsername = telegramUsername;
+          await user.save();
+          console.log('📝 Updated telegramUsername for existing user:', user);
+        }
+      }
+
       const welcomeMessage = `👋 Welcome to the Double Penis Verification Bot!
 
 /verify to begin`;
@@ -104,58 +189,6 @@ mongoose
         .catch((err) => {
           console.error(`❌ Error sending welcome message to Telegram ID: ${telegramId}:`, err);
         });
-
-      // Process referral if a referral code is provided
-      if (referralCodeUsed) {
-        const referrer = await User.findOne({ referralCode: referralCodeUsed.trim() });
-        if (referrer) {
-          // Check if the new user already exists
-          let user = await User.findOne({ telegramId });
-          if (!user) {
-            // Create a new user without a referral code yet
-            user = new User({
-              telegramId,
-              telegramUsername,
-              referrals: 0,
-            });
-            await user.save();
-            console.log(`🆕 New user registered via referral: ${telegramId}`);
-          }
-
-          // Avoid self-referral and duplicate referral
-          if (referrer.telegramId !== telegramId && !user.referredBy) {
-            user.referredBy = referrer.telegramId;
-            await user.save();
-
-            referrer.referrals += 1;
-            await referrer.save();
-
-            console.log(`🔗 Referral recorded: ${referrer.telegramId} referred ${telegramId}`);
-
-            // Notify the referrer via Telegram messages
-            try {
-              // First message
-              await bot.sendMessage(
-                referrer.telegramId,
-                'Congratulations! Someone has used your referral link. 🎉'
-              );
-
-              // Second message with total referrals and username of who signed up
-              const totalReferrals = referrer.referrals;
-              const newUserUsername = telegramUsername ? `@${telegramUsername}` : 'a new user';
-
-              await bot.sendMessage(
-                referrer.telegramId,
-                `You now have a total of ${totalReferrals} referrals!\nNew referral: ${newUserUsername}`
-              );
-
-              console.log(`✅ Notified referrer (${referrer.telegramId}) of new referral.`);
-            } catch (err) {
-              console.error(`❌ Error notifying referrer (${referrer.telegramId}):`, err);
-            }
-          }
-        }
-      }
     });
 
     // Handle '/verify' command from users in Telegram
