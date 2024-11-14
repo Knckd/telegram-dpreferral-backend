@@ -220,86 +220,60 @@ mongoose
       }
 
       try {
-        // Check if the user is a member of the required Telegram channel
-        const chatMember = await bot.getChatMember(`@${process.env.CHANNEL_USERNAME}`, telegramId);
+        // Proceed with verification without checking group membership
+        let user = await User.findOne({ telegramId });
 
-        console.log(`🔍 User's membership status: ${chatMember.status}`);
-
-        if (['member', 'administrator', 'creator'].includes(chatMember.status)) {
-          // User is a member, proceed with verification
-          let user = await User.findOne({ telegramId });
-
-          if (user) {
-            // Update username if changed
-            if (user.telegramUsername !== telegramUsername) {
-              user.telegramUsername = telegramUsername;
-              await user.save();
-              console.log('📝 Updated telegramUsername for existing user:', user);
-            }
-            bot
-              .sendMessage(
-                chatId,
-                '✅ You have already been verified! You can now visit the website to claim your free tokens. 🎉'
-              )
-              .then(() => {
-                console.log(`✅ Sent already verified message to Telegram ID: ${telegramId}`);
-              })
-              .catch((err) => {
-                console.error(
-                  `❌ Error sending already verified message to Telegram ID: ${telegramId}:`,
-                  err
-                );
-              });
-          } else {
-            // Register the user with both telegramId and telegramUsername
-            const referralCode = await generateReferralCode();
-
-            user = new User({
-              telegramId,
-              telegramUsername,
-              referralCode,
-              referrals: 0,
-            });
-
+        if (user) {
+          // Update username if changed
+          if (user.telegramUsername !== telegramUsername) {
+            user.telegramUsername = telegramUsername;
             await user.save();
-
-            // Send verification success message via Telegram
-            bot
-              .sendMessage(
-                chatId,
-                '🎉 Verification successful! You can now visit the website to claim your free tokens.'
-              )
-              .then(() => {
-                console.log(`✅ Sent verification success message to Telegram ID: ${telegramId}`);
-              })
-              .catch((err) => {
-                console.error(
-                  `❌ Error sending verification success message to Telegram ID: ${telegramId}:`,
-                  err
-                );
-              });
-
-            console.log('🆕 New user saved successfully:', user);
+            console.log('📝 Updated telegramUsername for existing user:', user);
           }
-        } else {
-          // User is not a member of the required Telegram channel
           bot
             .sendMessage(
               chatId,
-              `❌ You are not a member of our Telegram channel. Please join first: [Join Here](https://t.me/${process.env.CHANNEL_USERNAME}) and then send /verify again.`,
-              { parse_mode: 'Markdown' }
+              '✅ You have already been verified! You can now visit the website to claim your free tokens. 🎉'
             )
             .then(() => {
-              console.log(`⚠️ Instructed Telegram ID: ${telegramId} to join the channel.`);
+              console.log(`✅ Sent already verified message to Telegram ID: ${telegramId}`);
             })
             .catch((err) => {
               console.error(
-                `❌ Error sending not a member message to Telegram ID: ${telegramId}:`,
+                `❌ Error sending already verified message to Telegram ID: ${telegramId}:`,
+                err
+              );
+            });
+        } else {
+          // Register the user with both telegramId and telegramUsername
+          const referralCode = await generateReferralCode();
+
+          user = new User({
+            telegramId,
+            telegramUsername,
+            referralCode,
+            referrals: 0,
+          });
+
+          await user.save();
+
+          // Send verification success message via Telegram
+          bot
+            .sendMessage(
+              chatId,
+              '🎉 Verification successful! You can now visit the website to claim your free tokens.'
+            )
+            .then(() => {
+              console.log(`✅ Sent verification success message to Telegram ID: ${telegramId}`);
+            })
+            .catch((err) => {
+              console.error(
+                `❌ Error sending verification success message to Telegram ID: ${telegramId}:`,
                 err
               );
             });
 
-          console.log('⚠️ User is not a member of the channel.');
+          console.log('🆕 New user saved successfully:', user);
         }
       } catch (error) {
         console.error('🔴 Verification Error:', error);
